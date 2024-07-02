@@ -1,0 +1,10 @@
+[package]
+name = "rsqlbench"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+rand = "0.8.5"
+tracing = "0.1"
+tracing-subscriber = "0.3"
