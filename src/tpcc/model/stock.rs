@@ -4,7 +4,7 @@ use rand::{thread_rng, Rng};
 
 use crate::tpcc::random::rand_str;
 
-use super::Warehouse;
+use super::{Warehouse, STOCKS_PER_WAREHOUSE};
 
 #[derive(Debug)]
 pub struct Stock {
@@ -27,7 +27,7 @@ impl StockGenerator {
     pub fn from_warehouse(warehouse: &Warehouse) -> Self {
         Self {
             warehouse_id: warehouse.id,
-            range: 1..=100000,
+            range: 1..=(STOCKS_PER_WAREHOUSE as _),
         }
     }
 }

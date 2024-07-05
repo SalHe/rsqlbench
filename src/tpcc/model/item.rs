@@ -14,12 +14,12 @@ pub struct Item {
 }
 
 pub struct ItemGenerator {
-    range: RangeInclusive<u32>,
+    id: RangeInclusive<u32>,
 }
 
 impl ItemGenerator {
-    pub fn new(range: RangeInclusive<u32>) -> Self {
-        Self { range }
+    pub fn new(id: RangeInclusive<u32>) -> Self {
+        Self { id }
     }
 }
 
@@ -27,7 +27,7 @@ impl Iterator for ItemGenerator {
     type Item = Item;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.range.next().map(|id| Item {
+        self.id.next().map(|id| Item {
             id,
             image_id: thread_rng().gen_range(1..=10000),
             name: rand_str(14, 24),

@@ -2,7 +2,7 @@ use std::ops::RangeInclusive;
 
 use crate::tpcc::random::{rand_double, rand_str, rand_zip};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Warehouse {
     pub id: u32,
     pub name: String,

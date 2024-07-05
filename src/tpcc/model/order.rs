@@ -1,10 +1,11 @@
-use std::{iter::Zip, ops::RangeInclusive, time::Instant};
+use std::{iter::Zip, ops::RangeInclusive};
 
 use rand::{prelude::*, thread_rng, Rng};
+use time::OffsetDateTime;
 
 use crate::tpcc::random::{rand_double, rand_str};
 
-use super::District;
+use super::{District, ORDERS_PER_DISTRICT};
 
 #[derive(Debug)]
 pub struct NewOrder {
@@ -21,7 +22,7 @@ pub struct OrderLine {
     pub number: u8,
     pub item_id: u32,
     pub supply_warehouse_id: u32,
-    pub delivery_date: Option<Instant>,
+    pub delivery_date: Option<OffsetDateTime>,
     pub quantity: u8,
     pub amount: f32,
     pub dist_info: String,
@@ -33,7 +34,7 @@ pub struct Order {
     pub district_id: u8,
     pub warehouse_id: u32,
     pub customer_id: u16,
-    pub entry_date: Option<Instant>,
+    pub entry_date: Option<OffsetDateTime>,
     pub carrier_id: Option<u8>,
     pub order_lines_count: u8,
     pub all_local: bool,
@@ -48,12 +49,12 @@ pub struct OrderGenerator {
 impl OrderGenerator {
     pub fn from_district(district: &District) -> Self {
         let mut rng = thread_rng();
-        let mut customer_id = (1..=3000).collect::<Vec<u16>>();
+        let mut customer_id = (1..=(ORDERS_PER_DISTRICT as _)).collect::<Vec<u16>>();
         customer_id.shuffle(&mut rng);
         Self {
             district_id: district.id,
             warehouse_id: district.warehouse_id,
-            id_range: (1..=3000).zip(customer_id),
+            id_range: (1..=(ORDERS_PER_DISTRICT as _)).zip(customer_id),
         }
     }
 }
@@ -95,7 +96,7 @@ pub struct OrderLineGenerator {
     order_id: u32,
     district_id: u8,
     warehouse_id: u32,
-    entry_date: Option<Instant>,
+    entry_date: Option<OffsetDateTime>,
     id: RangeInclusive<u8>,
 }
 

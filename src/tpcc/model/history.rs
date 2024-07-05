@@ -1,3 +1,5 @@
+use time::OffsetDateTime;
+
 use crate::tpcc::random::rand_str;
 
 use super::Customer;
@@ -9,6 +11,7 @@ pub struct History {
     pub customer_warehouse_id: u32,
     pub district_id: u8,
     pub warehouse_id: u32,
+    pub date: Option<OffsetDateTime>,
     pub amount: f32,
     pub data: String,
 }
@@ -43,6 +46,7 @@ impl Iterator for HistoryGenerator {
                 customer_warehouse_id: self.warehouse_id,
                 district_id: self.district_id,
                 warehouse_id: self.warehouse_id,
+                date: None,
                 amount: 10.00,
                 data: rand_str(12, 24),
             })

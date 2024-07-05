@@ -2,7 +2,7 @@ use std::ops::RangeInclusive;
 
 use crate::tpcc::random::{rand_double, rand_str, rand_zip};
 
-use super::Warehouse;
+use super::{Warehouse, DISTRICT_PER_WAREHOUSE};
 
 #[derive(Debug)]
 pub struct District {
@@ -26,7 +26,7 @@ pub struct DistrictGenerator {
 impl DistrictGenerator {
     pub fn from_warehouse(warehouse: &Warehouse) -> Self {
         Self {
-            id_range: 1..=10,
+            id_range: 1..=(DISTRICT_PER_WAREHOUSE as _),
             warehouse_id: warehouse.id,
         }
     }

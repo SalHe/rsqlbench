@@ -1,26 +1,29 @@
-use tracing::{debug, instrument};
+use super::model::{ItemGenerator, Warehouse};
 
-use super::model::{ItemGenerator, WarehouseGenerator};
-
-pub trait Loader {
-    fn load_items(&self, generator: ItemGenerator);
-    fn load_warehouses(&self, generator: WarehouseGenerator);
+#[async_trait::async_trait]
+pub trait Loader: Send {
+    async fn load_items(&mut self, generator: ItemGenerator) -> Result<(), sqlx::Error>;
+    async fn load_warehouses(
+        &mut self,
+        generator: async_channel::Receiver<Warehouse>,
+    ) -> Result<(), sqlx::Error>;
 }
 
-pub struct FakeLoader;
+// pub struct FakeLoader;
 
-impl Loader for FakeLoader {
-    #[instrument(skip(self, generator))]
-    fn load_items(&self, generator: ItemGenerator) {
-        for item in generator {
-            debug!("Loading {item:?}");
-        }
-    }
+// #[async_trait::async_trait]
+// impl Loader for FakeLoader {
+//     #[instrument(skip(self, generator))]
+//     async fn load_items(&self, generator: ItemGenerator) {
+//         for item in generator {
+//             debug!("Loading {item:?}");
+//         }
+//     }
 
-    #[instrument(skip(self, generator))]
-    fn load_warehouses(&self, generator: WarehouseGenerator) {
-        for warehouse in generator {
-            debug!("Loading {warehouse:?}");
-        }
-    }
-}
+//     #[instrument(skip(self, generator))]
+//     async fn load_warehouses(&self, generator: &mut async_channel::Receiver<Warehouse>) {
+//         while let Ok(warehouse) = generator.recv().await {
+//             debug!("Loading {warehouse:?}");
+//         }
+//     }
+// }
