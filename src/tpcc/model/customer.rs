@@ -69,9 +69,9 @@ impl Iterator for CustomerGenerator {
             ),
             since: None,
             credit: if thread_rng().gen_ratio(1, 10) {
-                "GC"
-            } else {
                 "BC"
+            } else {
+                "GC"
             }
             .to_string(),
             credit_limit: 50000.0,
