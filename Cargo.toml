@@ -18,5 +18,13 @@ tracing-subscriber = { version = "0.3", features = [
     "local-time",
     "time",
 ] }
-sqlx = { version = "0.7", features = ["mysql", "runtime-tokio", "time", "tls-rustls"] }
+sqlx = { version = "0.7", features = [
+    "mysql",
+    "postgres",
+    "runtime-tokio",
+    "time",
+    "tls-rustls",
+] }
 time = { version = "0.3.36", features = ["macros"] }
+const_format = "0.2.32"
+static_assertions = "1.1.0"

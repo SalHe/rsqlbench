@@ -1,4 +1,4 @@
-use std::{ops::RangeInclusive, rc::Rc};
+use std::{cmp::min, ops::RangeInclusive, rc::Rc};
 
 use anyhow::Context;
 use rsqlbench::{
@@ -38,7 +38,7 @@ async fn load_all_items(sut: Rc<Box<dyn Sut>>, loader_cfg: &cfg::Loader) -> anyh
     info!("Loading items...");
     let mut join_set = JoinSet::new();
     static ITEMS_COUNT: u32 = MAX_ITEMS as _;
-    let batch = ITEMS_COUNT / (loader_cfg.monkeys as u32);
+    let batch = min(ITEMS_COUNT / (loader_cfg.monkeys as u32), 100);
     for i in 0..loader_cfg.monkeys {
         let offset = batch * (i as u32);
         let rng = if i < loader_cfg.monkeys - 1 {
@@ -109,7 +109,7 @@ async fn main() -> anyhow::Result<()> {
     load_all_warehouses(sut.clone(), &cfg.loader).await?;
 
     sut.after_loaded().await?;
-    sut.destroy_schema().await?;
+    // sut.destroy_schema().await?;
 
     Ok(())
 }
