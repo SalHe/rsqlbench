@@ -44,7 +44,7 @@ impl Iterator for DistrictGenerator {
             city: rand_str(10, 20),
             state: rand_str(2, 2),
             zip: rand_zip(),
-            tax: rand_double(0.0, 2.0, 0) as _,
+            tax: rand_double(0.0, 0.2, 0) as _,
             ytd: 30000.00,
             next_order_id: 3001,
         })

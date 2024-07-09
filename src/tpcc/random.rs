@@ -49,11 +49,9 @@ pub fn rand_last_name() -> String {
 /// shown. For example, \[0.01 .. 100.00\] has 10,000 unique values, whereas \[1 ..100\] has only 100 unique va lues.
 pub fn rand_double(min: f64, max: f64, precision: isize) -> f64 {
     let mut rng = thread_rng();
-    let mut f = rng.gen::<f64>() / (max - min) + min;
-    if precision != 0 {
-        let scalar = 10.0f64.powf(precision as f64);
-        f = (scalar * f).round() / scalar;
-    }
+    let mut f = rng.gen_range(min..=max);
+    let scalar = 10.0f64.powf(-precision as f64);
+    f = (scalar * f).round() / scalar;
     f
 }
 

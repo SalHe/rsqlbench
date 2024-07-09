@@ -1,16 +1,19 @@
 use std::{cmp::min, ops::RangeInclusive, rc::Rc};
 
 use anyhow::Context;
+use clap::{Parser, Subcommand, ValueEnum};
+use config::{Config, Environment, File};
 use rsqlbench::{
     cfg::{self, BenchConfig},
     tpcc::{
         loader::Loader,
         model::{ItemGenerator, Warehouse, WarehouseGenerator, MAX_ITEMS},
+        random::rand_double,
         sut::{MysqlSut, Sut},
     },
 };
 use tokio::task::JoinSet;
-use tracing::{info, instrument, level_filters::LevelFilter};
+use tracing::{info, instrument, level_filters::LevelFilter, warn};
 use tracing_subscriber::{fmt::time::OffsetTime, EnvFilter};
 
 #[instrument(skip(loader, rx))]
@@ -85,8 +88,48 @@ async fn load_all_warehouses(
     Ok(())
 }
 
+#[derive(Debug, Clone, ValueEnum)]
+enum Database {
+    Mysql,
+}
+
+#[derive(Debug, Parser)]
+#[command(author, version, about, long_about=None)]
+struct Cli {
+    /// Configuration file.
+    #[arg(short, long, default_value = "rsqlbench.yaml")]
+    config: String,
+
+    /// System under test, SUT.
+    #[arg(long, value_enum)]
+    db: Database,
+
+    #[command(subcommand)]
+    command: Command,
+}
+
+#[derive(Debug, Subcommand)]
+enum Command {
+    #[command(subcommand)]
+    Tpcc(TpccCommand),
+}
+
+#[derive(Debug, Subcommand)]
+enum TpccCommand {
+    /// Build schema and load data for TPC-C benchmark.
+    Build,
+
+    /// Benchmark TPC-C.
+    Benchmark,
+
+    /// Destroy schema.
+    Destroy,
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    rand_double(0.0, 0.2, -4);
+    let cli = Cli::try_parse()?;
     tracing_subscriber::fmt()
         .with_env_filter(
             EnvFilter::builder()
@@ -96,20 +139,41 @@ async fn main() -> anyhow::Result<()> {
         .with_timer(OffsetTime::local_rfc_3339()?)
         .init();
 
-    info!("Hello tpcc");
+    let cfg: BenchConfig = Config::builder()
+        .add_source(File::with_name(&cli.config))
+        .add_source(Environment::with_prefix("RSB"))
+        .build()
+        .with_context(|| "Could not load config properly.")?
+        .try_deserialize()
+        .with_context(|| "Could not deserialize config file.")?;
 
-    let cfg = BenchConfig::new(Some("rsqlbench-dev"))
-        .with_context(|| "Could not load config properly.")?;
+    let sut: Rc<Box<dyn Sut>> = match cli.db {
+        Database::Mysql => Rc::new(Box::new(MysqlSut::new(cfg.connection))),
+    };
 
-    let sut: Rc<Box<dyn Sut>> = Rc::new(Box::new(MysqlSut::new(cfg.connection)));
-
-    sut.build_schema().await?;
-
-    load_all_items(sut.clone(), &cfg.loader).await?;
-    load_all_warehouses(sut.clone(), &cfg.loader).await?;
-
-    sut.after_loaded().await?;
-    // sut.destroy_schema().await?;
+    match cli.command {
+        Command::Tpcc(tpcc_cmd) => match tpcc_cmd {
+            TpccCommand::Build => {
+                info!("Building schema...");
+                sut.build_schema().await?;
+                info!("Loading all items...");
+                load_all_items(sut.clone(), &cfg.loader).await?;
+                info!("Loading all warehouses...");
+                load_all_warehouses(sut.clone(), &cfg.loader).await?;
+                info!("Data loaded.");
+                info!("Do some operations after data loading (such as building foreign keys and constraints)...");
+                sut.after_loaded().await?;
+            }
+            TpccCommand::Benchmark => {
+                warn!("not implemented!");
+            }
+            TpccCommand::Destroy => {
+                info!("Destroying schema...");
+                sut.destroy_schema().await?;
+                info!("Schema Destroyed.");
+            }
+        },
+    }
 
     Ok(())
 }
