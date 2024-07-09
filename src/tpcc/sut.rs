@@ -1,6 +1,8 @@
+mod generic;
 mod mysql;
 
 use async_trait::async_trait;
+pub use generic::*;
 pub use mysql::*;
 
 use super::{loader::Loader, transaction::Transaction};

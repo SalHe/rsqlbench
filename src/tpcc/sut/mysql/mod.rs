@@ -82,7 +82,8 @@ impl Sut for MysqlSut {
     async fn build_schema(&self) -> Result<(), sqlx::Error> {
         let mut conn = self.build_options_for_schema().connect().await?;
         #[rustfmt::skip]
-        let tables = [
+        let sqls = [
+"SET FOREIGN_KEY_CHECKS = 0",
 r#"
 create table warehouse (
   w_id        integer   not null,
@@ -218,7 +219,7 @@ create table stock (
 );
 "#,
 ];
-        for sql in tables {
+        for sql in sqls {
             conn.execute(sql).await?;
         }
         Ok(())

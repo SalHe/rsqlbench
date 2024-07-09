@@ -1,4 +1,4 @@
-use std::{cmp::min, ops::RangeInclusive, rc::Rc};
+use std::{ops::RangeInclusive, rc::Rc};
 
 use anyhow::Context;
 use clap::{Parser, Subcommand, ValueEnum};
@@ -7,7 +7,7 @@ use rsqlbench::{
     cfg::{self, BenchConfig},
     tpcc::{
         loader::Loader,
-        model::{ItemGenerator, Warehouse, WarehouseGenerator, MAX_ITEMS},
+        model::{ItemGenerator, Warehouse, WarehouseGenerator},
         random::rand_double,
         sut::{MysqlSut, Sut},
     },
@@ -36,25 +36,14 @@ async fn load_items(
     loader.load_items(ItemGenerator::new(range)).await
 }
 
-#[instrument(skip(sut, loader_cfg))]
-async fn load_all_items(sut: Rc<Box<dyn Sut>>, loader_cfg: &cfg::Loader) -> anyhow::Result<()> {
+#[instrument(skip(sut))]
+async fn load_all_items(sut: Rc<Box<dyn Sut>>, _: &cfg::Loader) -> anyhow::Result<()> {
     info!("Loading items...");
-    let mut join_set = JoinSet::new();
-    static ITEMS_COUNT: u32 = MAX_ITEMS as _;
-    let batch = min(ITEMS_COUNT / (loader_cfg.monkeys as u32), 100);
-    for i in 0..loader_cfg.monkeys {
-        let offset = batch * (i as u32);
-        let rng = if i < loader_cfg.monkeys - 1 {
-            (offset + 1)..=(offset + batch)
-        } else {
-            (offset + 1)..=ITEMS_COUNT
-        };
-        join_set.spawn(load_items(sut.loader().await?, i, rng));
-    }
-
-    while let Some(j) = join_set.join_next().await {
-        j??
-    }
+    let mut loader = sut.loader().await?;
+    loader.load_items(ItemGenerator::new(1..=50000)).await?;
+    loader
+        .load_items(ItemGenerator::new(50001..=100000))
+        .await?;
     info!("Items loaded.");
     Ok(())
 }

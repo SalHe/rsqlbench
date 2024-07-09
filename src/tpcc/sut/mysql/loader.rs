@@ -3,8 +3,9 @@ use sqlx::{prelude::*, MySqlConnection};
 use tracing::{info, instrument};
 
 use crate::tpcc::{
-    loader::{load_items, load_warehouse, Loader},
+    loader::Loader,
     model::{ItemGenerator, Warehouse},
+    sut::direct,
 };
 
 pub struct MysqlLoader {
@@ -22,7 +23,9 @@ impl Loader for MysqlLoader {
     #[instrument(skip(self, generator))]
     async fn load_items(&mut self, generator: ItemGenerator) -> Result<(), sqlx::Error> {
         self.conn
-            .transaction(|txn| Box::pin(async move { load_items(generator, txn).await }))
+            .transaction(|txn| {
+                Box::pin(async move { direct::load_items(generator, txn, 50000).await })
+            })
             .await
     }
 
@@ -34,7 +37,9 @@ impl Loader for MysqlLoader {
         while let Ok(warehouse) = generator.recv().await {
             info!("Loading warehouse ID={id}", id = warehouse.id);
             self.conn
-                .transaction(|txn| Box::pin(async move { load_warehouse(&warehouse, txn).await }))
+                .transaction(|txn| {
+                    Box::pin(async move { direct::load_warehouse(&warehouse, txn).await })
+                })
                 .await?;
         }
         Ok(())
