@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use loader::MysqlLoader;
 use sqlx::mysql::MySqlConnectOptions;
 
-use sqlx::{ConnectOptions, Executor, MySqlConnection};
+use sqlx::{ConnectOptions, Executor};
 use tracing::instrument;
 
 use super::{Sut, Terminal};
@@ -32,44 +32,6 @@ impl MysqlSut {
         }
         mysql
     }
-
-    async fn build_fkeys(&self, conn: &mut MySqlConnection) -> Result<(), sqlx::Error> {
-        let fkeys = [
-            "alter table district add constraint d_warehouse_fkey foreign key (d_w_id) references warehouse (w_id);",
-            "alter table customer add constraint c_district_fkey foreign key (c_w_id, c_d_id) references district (d_w_id, d_id); ",
-            "alter table history add constraint h_customer_fkey foreign key (h_c_w_id, h_c_d_id, h_c_id) references customer (c_w_id, c_d_id, c_id);",
-            "alter table history add constraint h_district_fkey foreign key (h_w_id, h_d_id) references district (d_w_id, d_id);",
-            "alter table new_order add constraint no_order_fkey foreign key (no_w_id, no_d_id, no_o_id) references oorder (o_w_id, o_d_id, o_id); ",
-            "alter table oorder add constraint o_customer_fkey foreign key (o_w_id, o_d_id, o_c_id) references customer (c_w_id, c_d_id, c_id); ",
-            "alter table order_line add constraint ol_order_fkey foreign key (ol_w_id, ol_d_id, ol_o_id) references oorder (o_w_id, o_d_id, o_id); ",
-            "alter table order_line add constraint ol_stock_fkey foreign key (ol_supply_w_id, ol_i_id) references stock (s_w_id, s_i_id); ",
-            "alter table stock add constraint s_warehouse_fkey foreign key (s_w_id) references warehouse (w_id); ",
-            "alter table stock add constraint s_item_fkey foreign key (s_i_id) references item (i_id);"
-        ];
-        for sql in fkeys {
-            conn.execute(sql).await?;
-        }
-        Ok(())
-    }
-
-    async fn build_indexes(&self, conn: &mut MySqlConnection) -> Result<(), sqlx::Error> {
-        let ddl = [
-            "alter table warehouse add constraint warehouse_pkey primary key (w_id);",
-            "alter table district add constraint district_pkey primary key (d_w_id, d_id);",
-            "alter table customer add constraint customer_pkey primary key (c_w_id, c_d_id, c_id);",
-            "create index customer_idx1 on  customer (c_w_id, c_d_id, c_last, c_first);",
-            "alter table oorder add constraint oorder_pkey primary key (o_w_id, o_d_id, o_id);",
-            "create unique index oorder_idx1 on  oorder (o_w_id, o_d_id, o_carrier_id, o_id);",
-            "alter table new_order add constraint new_order_pkey primary key (no_w_id, no_d_id, no_o_id);",
-            "alter table order_line add constraint order_line_pkey primary key (ol_w_id, ol_d_id, ol_o_id, ol_number);",
-            "alter table stock add constraint stock_pkey primary key (s_w_id, s_i_id);",
-            "alter table item add constraint item_pkey primary key (i_id);",
-        ];
-        for sql in ddl {
-            conn.execute(sql).await?;
-        }
-        Ok(())
-    }
 }
 
 #[async_trait]
@@ -82,153 +44,152 @@ impl Sut for MysqlSut {
     async fn build_schema(&self) -> Result<(), sqlx::Error> {
         let mut conn = self.build_options_for_schema().connect().await?;
         #[rustfmt::skip]
-        let sqls = [
+        let sql_set = [
 "SET FOREIGN_KEY_CHECKS = 0",
+r#"CREATE TABLE `warehouse` (
+  `w_id` INT(6) NOT NULL,
+  `w_ytd` DECIMAL(12, 2) NULL,
+  `w_tax` DECIMAL(4, 4) NULL,
+  `w_name` VARCHAR(10) BINARY NULL,
+  `w_street_1` VARCHAR(20) BINARY NULL,
+  `w_street_2` VARCHAR(20) BINARY NULL,
+  `w_city` VARCHAR(20) BINARY NULL,
+  `w_state` CHAR(2) BINARY NULL,
+  `w_zip` CHAR(9) BINARY NULL,
+PRIMARY KEY (`w_id`)
+)"#,
+
 r#"
-create table warehouse (
-  w_id        integer   not null,
-  w_ytd       decimal(12,2),
-  w_tax       decimal(4,4),
-  w_name      varchar(10),
-  w_street_1  varchar(20),
-  w_street_2  varchar(20),
-  w_city      varchar(20),
-  w_state     char(2),
-  w_zip       char(9)
-);
+CREATE TABLE `district` (
+  `d_id` INT(2) NOT NULL,
+  `d_w_id` INT(6) NOT NULL,
+  `d_ytd` DECIMAL(12, 2) NULL,
+  `d_tax` DECIMAL(4, 4) NULL,
+  `d_next_o_id` INT NULL,
+  `d_name` VARCHAR(10) BINARY NULL,
+  `d_street_1` VARCHAR(20) BINARY NULL,
+  `d_street_2` VARCHAR(20) BINARY NULL,
+  `d_city` VARCHAR(20) BINARY NULL,
+  `d_state` CHAR(2) BINARY NULL,
+  `d_zip` CHAR(9) BINARY NULL,
+PRIMARY KEY (`d_w_id`,`d_id`)
+)"#,
+
+r#"
+CREATE TABLE `customer` (
+  `c_id` INT(5) NOT NULL,
+  `c_d_id` INT(2) NOT NULL,
+  `c_w_id` INT(6) NOT NULL,
+  `c_first` VARCHAR(16) BINARY NULL,
+  `c_middle` CHAR(2) BINARY NULL,
+  `c_last` VARCHAR(16) BINARY NULL,
+  `c_street_1` VARCHAR(20) BINARY NULL,
+  `c_street_2` VARCHAR(20) BINARY NULL,
+  `c_city` VARCHAR(20) BINARY NULL,
+  `c_state` CHAR(2) BINARY NULL,
+  `c_zip` CHAR(9) BINARY NULL,
+  `c_phone` CHAR(16) BINARY NULL,
+  `c_since` DATETIME NULL,
+  `c_credit` CHAR(2) BINARY NULL,
+  `c_credit_lim` DECIMAL(12, 2) NULL,
+  `c_discount` DECIMAL(4, 4) NULL,
+  `c_balance` DECIMAL(12, 2) NULL,
+  `c_ytd_payment` DECIMAL(12, 2) NULL,
+  `c_payment_cnt` INT(8) NULL,
+  `c_delivery_cnt` INT(8) NULL,
+  `c_data` VARCHAR(500) BINARY NULL,
+PRIMARY KEY (`c_w_id`,`c_d_id`,`c_id`),
+KEY c_w_id (`c_w_id`,`c_d_id`,`c_last`(16),`c_first`(16))
+)"#,
+
+r#"CREATE TABLE `history` (
+  `h_c_id` INT NULL,
+  `h_c_d_id` INT NULL,
+  `h_c_w_id` INT NULL,
+  `h_d_id` INT NULL,
+  `h_w_id` INT NULL,
+  `h_date` DATETIME NULL,
+  `h_amount` DECIMAL(6, 2) NULL,
+  `h_data` VARCHAR(24) BINARY NULL
+)
 "#,
 
 r#"
-create table district (
-  d_w_id       integer       not null,
-  d_id         integer       not null,
-  d_ytd        decimal(12,2),
-  d_tax        decimal(4,4),
-  d_next_o_id  integer,
-  d_name       varchar(10),
-  d_street_1   varchar(20),
-  d_street_2   varchar(20),
-  d_city       varchar(20),
-  d_state      char(2),
-  d_zip        char(9)
-);"#,
+CREATE TABLE `new_order` (
+  `no_w_id` INT NOT NULL,
+  `no_d_id` INT NOT NULL,
+  `no_o_id` INT NOT NULL,
+PRIMARY KEY (`no_w_id`, `no_d_id`, `no_o_id`)
+)"#,
 
 r#"
-create table customer (
-  c_w_id         integer        not null,
-  c_d_id         integer        not null,
-  c_id           integer        not null,
-  c_discount     decimal(4,4),
-  c_credit       char(2),
-  c_last         varchar(16),
-  c_first        varchar(16),
-  c_credit_lim   decimal(12,2),
-  c_balance      decimal(12,2),
-  c_ytd_payment  decimal(12,2),
-  c_payment_cnt  integer,
-  c_delivery_cnt integer,
-  c_street_1     varchar(20),
-  c_street_2     varchar(20),
-  c_city         varchar(20),
-  c_state        char(2),
-  c_zip          char(9),
-  c_phone        char(16),
-  c_since        timestamp,
-  c_middle       char(2),
-  c_data         varchar(500)
-);
-"#,
-
-r#"create table history (
-  h_c_id   integer,
-  h_c_d_id integer,
-  h_c_w_id integer,
-  h_d_id   integer,
-  h_w_id   integer,
-  h_date   timestamp,
-  h_amount decimal(6,2),
-  h_data   varchar(24)
-);
-"#,
+CREATE TABLE `oorder` (
+  `o_id` INT NOT NULL,
+  `o_w_id` INT NOT NULL,
+  `o_d_id` INT NOT NULL,
+  `o_c_id` INT NULL,
+  `o_carrier_id` INT NULL,
+  `o_ol_cnt` INT NULL,
+  `o_all_local` INT NULL,
+  `o_entry_d` DATETIME NULL,
+PRIMARY KEY (`o_w_id`,`o_d_id`,`o_id`),
+KEY o_w_id (`o_w_id`,`o_d_id`,`o_c_id`,`o_id`)
+)"#,
 
 r#"
-create table new_order (
-  no_w_id  integer   not null,
-  no_d_id  integer   not null,
-  no_o_id  integer   not null
-);
-"#,
+CREATE TABLE `order_line` (
+  `ol_w_id` INT NOT NULL,
+  `ol_d_id` INT NOT NULL,
+  `ol_o_id` iNT NOT NULL,
+  `ol_number` INT NOT NULL,
+  `ol_i_id` INT NULL,
+  `ol_delivery_d` DATETIME NULL,
+  `ol_amount` INT NULL,
+  `ol_supply_w_id` INT NULL,
+  `ol_quantity` INT NULL,
+  `ol_dist_info` CHAR(24) BINARY NULL,
+PRIMARY KEY (`ol_w_id`,`ol_d_id`,`ol_o_id`,`ol_number`)
+)"#,
 
 r#"
-create table oorder (
-  o_w_id       integer      not null,
-  o_d_id       integer      not null,
-  o_id         integer      not null,
-  o_c_id       integer,
-  o_carrier_id integer,
-  o_ol_cnt     integer,
-  o_all_local  integer,
-  o_entry_d    timestamp
-);
-"#,
+CREATE TABLE `item` (
+  `i_id` INT(6) NOT NULL,
+  `i_im_id` INT NULL,
+  `i_name` VARCHAR(24) BINARY NULL,
+  `i_price` DECIMAL(5, 2) NULL,
+  `i_data` VARCHAR(50) BINARY NULL,
+PRIMARY KEY (`i_id`)
+)"#,
 
 r#"
-create table order_line (
-  ol_w_id         integer   not null,
-  ol_d_id         integer   not null,
-  ol_o_id         integer   not null,
-  ol_number       integer   not null,
-  ol_i_id         integer   not null,
-  ol_delivery_d   timestamp,
-  ol_amount       decimal(6,2),
-  ol_supply_w_id  integer,
-  ol_quantity     integer,
-  ol_dist_info    char(24)
-);
-"#,
-
-r#"
-create table item (
-  i_id     integer      not null,
-  i_name   varchar(24),
-  i_price  decimal(5,2),
-  i_data   varchar(50),
-  i_im_id  integer
-);
-"#,
-
-r#"
-create table stock (
-  s_w_id       integer       not null,
-  s_i_id       integer       not null,
-  s_quantity   integer,
-  s_ytd        integer,
-  s_order_cnt  integer,
-  s_remote_cnt integer,
-  s_data       varchar(50),
-  s_dist_01    char(24),
-  s_dist_02    char(24),
-  s_dist_03    char(24),
-  s_dist_04    char(24),
-  s_dist_05    char(24),
-  s_dist_06    char(24),
-  s_dist_07    char(24),
-  s_dist_08    char(24),
-  s_dist_09    char(24),
-  s_dist_10    char(24)
-);
-"#,
+CREATE TABLE `stock` (
+  `s_i_id` INT(6) NOT NULL,
+  `s_w_id` INT(6) NOT NULL,
+  `s_quantity` INT(6) NULL,
+  `s_dist_01` CHAR(24) BINARY NULL,
+  `s_dist_02` CHAR(24) BINARY NULL,
+  `s_dist_03` CHAR(24) BINARY NULL,
+  `s_dist_04` CHAR(24) BINARY NULL,
+  `s_dist_05` CHAR(24) BINARY NULL,
+  `s_dist_06` CHAR(24) BINARY NULL,
+  `s_dist_07` CHAR(24) BINARY NULL,
+  `s_dist_08` CHAR(24) BINARY NULL,
+  `s_dist_09` CHAR(24) BINARY NULL,
+  `s_dist_10` CHAR(24) BINARY NULL,
+  `s_ytd` BIGINT(10) NULL,
+  `s_order_cnt` INT(6) NULL,
+  `s_remote_cnt` INT(6) NULL,
+  `s_data` VARCHAR(50) BINARY NULL,
+PRIMARY KEY (`s_w_id`,`s_i_id`)
+)"#,
 ];
-        for sql in sqls {
+        for sql in sql_set {
             conn.execute(sql).await?;
         }
         Ok(())
     }
 
     async fn after_loaded(&self) -> Result<(), sqlx::Error> {
-        let mut conn = self.build_options_for_schema().connect().await?;
-        self.build_indexes(&mut conn).await?;
-        self.build_fkeys(&mut conn).await?;
         Ok(())
     }
 

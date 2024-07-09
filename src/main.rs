@@ -8,10 +8,10 @@ use rsqlbench::{
     tpcc::{
         loader::Loader,
         model::{ItemGenerator, Warehouse, WarehouseGenerator},
-        random::rand_double,
         sut::{MysqlSut, Sut},
     },
 };
+use time::{format_description::well_known::Rfc3339, UtcOffset};
 use tokio::task::JoinSet;
 use tracing::{info, instrument, level_filters::LevelFilter, warn};
 use tracing_subscriber::{fmt::time::OffsetTime, EnvFilter};
@@ -117,7 +117,6 @@ enum TpccCommand {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    rand_double(0.0, 0.2, -4);
     let cli = Cli::try_parse()?;
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -125,7 +124,10 @@ async fn main() -> anyhow::Result<()> {
                 .with_default_directive(LevelFilter::INFO.into())
                 .parse("")?,
         )
-        .with_timer(OffsetTime::local_rfc_3339()?)
+        .with_timer(
+            OffsetTime::local_rfc_3339()
+                .unwrap_or(OffsetTime::new(UtcOffset::from_hms(8, 0, 0)?, Rfc3339)),
+        )
         .init();
 
     let cfg: BenchConfig = Config::builder()
