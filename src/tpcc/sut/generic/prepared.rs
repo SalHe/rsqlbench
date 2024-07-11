@@ -15,7 +15,7 @@ use crate::tpcc::model::{
 pub async fn load_stocks<DB>(
     warehouse: &Warehouse,
     txn: &mut sqlx::Transaction<'_, DB>,
-) -> Result<(), sqlx::Error>
+) -> anyhow::Result<()>
 where
     DB: Database,
     for<'a> &'a mut DB::Connection: sqlx::Executor<'a, Database = DB>,
@@ -68,7 +68,7 @@ where
 pub async fn load_warehouse<DB>(
     warehouse: &Warehouse,
     txn: &mut sqlx::Transaction<'_, DB>,
-) -> Result<(), sqlx::Error>
+) -> anyhow::Result<()>
 where
     DB: Database,
     for<'a> &'a mut DB::Connection: sqlx::Executor<'a, Database = DB>,
@@ -104,7 +104,7 @@ where
 async fn load_districts<DB>(
     warehouse: &Warehouse,
     txn: &mut sqlx::Transaction<'_, DB>,
-) -> Result<(), sqlx::Error>
+) -> anyhow::Result<()>
 where
     DB: Database,
     for<'a> &'a mut DB::Connection: sqlx::Executor<'a, Database = DB>,
@@ -159,7 +159,7 @@ where
 async fn load_customers<DB>(
     district: &District,
     txn: &mut sqlx::Transaction<'_, DB>,
-) -> Result<(), sqlx::Error>
+) -> anyhow::Result<()>
 where
     DB: Database,
     for<'a> &'a mut DB::Connection: sqlx::Executor<'a, Database = DB>,
@@ -241,7 +241,7 @@ where
 async fn load_orders<DB>(
     district: &District,
     txn: &mut sqlx::Transaction<'_, DB>,
-) -> Result<(), sqlx::Error>
+) -> anyhow::Result<()>
 where
     DB: Database,
     for<'a> &'a mut DB::Connection: sqlx::Executor<'a, Database = DB>,
@@ -343,7 +343,7 @@ where
 pub async fn load_items<DB>(
     generator: ItemGenerator,
     txn: &mut sqlx::Transaction<'_, DB>,
-) -> Result<(), sqlx::Error>
+) -> anyhow::Result<()>
 where
     DB: Database,
     for<'a> &'a mut DB::Connection: sqlx::Executor<'a, Database = DB>,

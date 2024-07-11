@@ -33,4 +33,4 @@ clap = { version = "4.5.9", features = ["derive"] }
 [profile.release]
 opt-level = 'z'
 lto = true
-strip = true
+# strip = true

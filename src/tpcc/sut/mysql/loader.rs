@@ -21,24 +21,28 @@ impl MysqlLoader {
 #[async_trait]
 impl Loader for MysqlLoader {
     #[instrument(skip(self, generator))]
-    async fn load_items(&mut self, generator: ItemGenerator) -> Result<(), sqlx::Error> {
+    async fn load_items(&mut self, generator: ItemGenerator) -> anyhow::Result<()> {
         self.conn
             .transaction(|txn| {
-                Box::pin(async move { direct::load_items(generator, txn, 50000).await })
+                Box::pin(async move { direct::load_items(generator, &mut **txn, 50000).await })
             })
-            .await
+            .await?;
+        Ok(())
     }
 
     #[instrument(skip(self, generator))]
     async fn load_warehouses(
         &mut self,
         generator: async_channel::Receiver<Warehouse>,
-    ) -> Result<(), sqlx::Error> {
+    ) -> anyhow::Result<()> {
+        sqlx::query("set autocommit = 1")
+            .execute(&mut self.conn)
+            .await?;
         while let Ok(warehouse) = generator.recv().await {
             info!("Loading warehouse ID={id}", id = warehouse.id);
             self.conn
                 .transaction(|txn| {
-                    Box::pin(async move { direct::load_warehouse(&warehouse, txn).await })
+                    Box::pin(async move { direct::load_warehouse(&warehouse, &mut **txn).await })
                 })
                 .await?;
         }

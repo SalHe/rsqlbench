@@ -21,7 +21,7 @@ async fn load_warehouse(
     loader_id: usize,
     loader: Box<dyn Loader>,
     rx: async_channel::Receiver<Warehouse>,
-) -> Result<(), sqlx::Error> {
+) -> anyhow::Result<()> {
     let mut loader = loader;
     loader.load_warehouses(rx).await
 }
@@ -31,7 +31,7 @@ async fn load_items(
     loader: Box<dyn Loader>,
     loader_id: usize,
     range: RangeInclusive<u32>,
-) -> Result<(), sqlx::Error> {
+) -> anyhow::Result<()> {
     let mut loader = loader;
     loader.load_items(ItemGenerator::new(range)).await
 }

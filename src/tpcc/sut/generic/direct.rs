@@ -8,14 +8,14 @@ use crate::tpcc::model::{
     STOCKS_PER_WAREHOUSE,
 };
 
-pub async fn load_stocks<DB>(
+pub async fn load_stocks<DB, E>(
     warehouse: &Warehouse,
-    txn: &mut sqlx::Transaction<'_, DB>,
+    conn: &mut E,
     batch_size: usize,
-) -> Result<(), sqlx::Error>
+) -> anyhow::Result<()>
 where
     DB: Database,
-    for<'a> &'a mut DB::Connection: sqlx::Executor<'a, Database = DB>,
+    for<'a> &'a mut E: sqlx::Executor<'a, Database = DB>,
     for<'a> <DB as HasArguments<'a>>::Arguments: IntoArguments<'a, DB>,
 {
     info!(
@@ -39,22 +39,30 @@ where
         } = stock;
         sql.push_str(&format!("('{item_id}', '{warehouse_id}', '{quantity}', '{dist0}', '{dist1}', '{dist2}', '{dist3}', '{dist4}', '{dist5}', '{dist6}', '{dist7}', '{dist8}', '{dist9}', '{ytd}', '{order_count}', '{remote_count}', '{data}'),"));
         if stock.item_id % (batch_size as u32) == 0 {
+            info!(
+                "Executing insert stocks {stock_id} for warehouse ID={id} (batch size={batch_size})...",
+                stock_id = stock.item_id,
+                id = warehouse.id,
+            );
             sqlx::query(&sql[0..sql.len() - 1])
-                .execute(&mut **txn)
+                .execute(&mut *conn)
                 .await?;
-            sql = SQL.to_string();
+            info!(
+                "Executed insert stocks {stock_id} for warehouse ID={id} (batch size={batch_size})",
+                stock_id = stock.item_id,
+                id = warehouse.id,
+            );
+            sql.clear();
+            sql.push_str(SQL);
         }
     }
     Ok(())
 }
 
-pub async fn load_warehouse<DB>(
-    warehouse: &Warehouse,
-    txn: &mut sqlx::Transaction<'_, DB>,
-) -> Result<(), sqlx::Error>
+pub async fn load_warehouse<DB, E>(warehouse: &Warehouse, conn: &mut E) -> anyhow::Result<()>
 where
     DB: Database,
-    for<'a> &'a mut DB::Connection: sqlx::Executor<'a, Database = DB>,
+    for<'a> &'a mut E: sqlx::Executor<'a, Database = DB>,
     for<'a> <DB as HasArguments<'a>>::Arguments: IntoArguments<'a, DB>,
 {
     let Warehouse {
@@ -68,20 +76,17 @@ where
         ytd,
     } = warehouse;
     sqlx::query(&format!("INSERT INTO warehouse (w_id, w_name, w_street_1, w_street_2, w_city, w_state, w_zip, w_tax, w_ytd) VALUES ('{id}', '{name}', '{street0}', '{street1}', '{city}', '{state}', '{zip}', '{tax}', '{ytd}')"))
-                            .execute(&mut **txn)
+                            .execute(&mut *conn)
                             .await?;
-    load_stocks(warehouse, txn, STOCKS_PER_WAREHOUSE / 5).await?;
-    load_districts(warehouse, txn).await?;
+    load_stocks(warehouse, conn, 1000).await?;
+    load_districts(warehouse, conn).await?;
     Ok(())
 }
 
-async fn load_districts<DB>(
-    warehouse: &Warehouse,
-    txn: &mut sqlx::Transaction<'_, DB>,
-) -> Result<(), sqlx::Error>
+async fn load_districts<DB, E>(warehouse: &Warehouse, conn: &mut E) -> anyhow::Result<()>
 where
     DB: Database,
-    for<'a> &'a mut DB::Connection: sqlx::Executor<'a, Database = DB>,
+    for<'a> &'a mut E: sqlx::Executor<'a, Database = DB>,
     for<'a> <DB as HasArguments<'a>>::Arguments: IntoArguments<'a, DB>,
 {
     let batch_size: usize = 10;
@@ -109,24 +114,25 @@ where
         sql.push_str(&format!("('{id}','{warehouse_id}','{name}','{street0}','{street1}','{city}','{state}','{zip}','{tax}','{ytd}','{next_order_id}'),"));
         if district.id % (batch_size as u8) == 0 {
             sqlx::query(&sql[0..sql.len() - 1])
-                .execute(&mut **txn)
+                .execute(&mut *conn)
                 .await?;
-            sql = SQL.to_string();
+            sql.clear();
+            sql.push_str(SQL);
         }
-        load_customers(&district, txn, CUSTOMER_PER_DISTRICT).await?;
-        load_orders(&district, txn, ORDERS_PER_DISTRICT / 2).await?;
+        load_customers(&district, conn, CUSTOMER_PER_DISTRICT).await?;
+        load_orders(&district, conn, ORDERS_PER_DISTRICT / 2).await?;
     }
     Ok(())
 }
 
-async fn load_customers<DB>(
+async fn load_customers<DB, E>(
     district: &District,
-    txn: &mut sqlx::Transaction<'_, DB>,
+    conn: &mut E,
     batch_size: usize,
-) -> Result<(), sqlx::Error>
+) -> anyhow::Result<()>
 where
     DB: Database,
-    for<'a> &'a mut DB::Connection: sqlx::Executor<'a, Database = DB>,
+    for<'a> &'a mut E: sqlx::Executor<'a, Database = DB>,
     for<'a> <DB as HasArguments<'a>>::Arguments: IntoArguments<'a, DB>,
 {
     info!(
@@ -164,9 +170,10 @@ where
         customer_sql.push_str(&format!("('{id}', '{district_id}', '{warehouse_id}', '{first_name}', '{middle_name}', '{last_name}', '{street0}', '{street1}', '{city}', '{state}', '{zip}', '{phone}', NOW(), '{credit}', '{credit_limit}', '{discount}', '{balance}', '{ytd_payment}', '{payment_count}', '{delivery_count}', '{data}'),"));
         if customer.id % (batch_size as u16) == 0 {
             sqlx::query(&customer_sql[0..customer_sql.len() - 1])
-                .execute(&mut **txn)
+                .execute(&mut *conn)
                 .await?;
-            customer_sql = CUSTOMER_SQL.to_string();
+            customer_sql.clear();
+            customer_sql.push_str(CUSTOMER_SQL);
         }
 
         for history in HistoryGenerator::from_customer(&customer) {
@@ -181,21 +188,21 @@ where
                 data,
             } = history;
             sqlx::query(&format!("INSERT INTO history (h_c_id, h_c_d_id, h_c_w_id, h_d_id, h_w_id, h_date, h_amount, h_data) VALUES ('{customer_id}', '{customer_district_id}', '{customer_warehouse_id}', '{district_id}', '{warehouse_id}', NOW(), '{amount}', '{data}')"))
-                .execute(&mut **txn)
+                .execute(&mut *conn)
                 .await?;
         }
     }
     Ok(())
 }
 
-async fn load_orders<DB>(
+async fn load_orders<DB, E>(
     district: &District,
-    txn: &mut sqlx::Transaction<'_, DB>,
+    conn: &mut E,
     batch_size: usize,
-) -> Result<(), sqlx::Error>
+) -> anyhow::Result<()>
 where
     DB: Database,
-    for<'a> &'a mut DB::Connection: sqlx::Executor<'a, Database = DB>,
+    for<'a> &'a mut E: sqlx::Executor<'a, Database = DB>,
     for<'a> <DB as HasArguments<'a>>::Arguments: IntoArguments<'a, DB>,
 {
     info!(
@@ -225,9 +232,10 @@ where
         sql_order.push_str(&format!("('{id}', '{district_id}', '{warehouse_id}', '{customer_id}', NOW(), {carrier_id}, '{order_lines_count}', '{all_local}'),"));
         if order.id % (batch_size as u32) == 0 {
             sqlx::query(&sql_order[0..sql_order.len() - 1])
-                .execute(&mut **txn)
+                .execute(&mut *conn)
                 .await?;
-            sql_order = SQL_ORDER.to_string();
+            sql_order.clear();
+            sql_order.push_str(SQL_ORDER);
         }
 
         // TODO batch optimize
@@ -240,7 +248,7 @@ where
             sqlx::query(&format!(
                 "INSERT INTO new_order (no_o_id, no_d_id, no_w_id) VALUES ('{order_id}', '{district_id}', '{warehouse_id}')",
             ))
-            .execute(&mut **txn)
+            .execute(&mut *conn)
             .await?;
         }
 
@@ -262,20 +270,20 @@ where
             sql_order_line.push_str(&format!("('{order_id}', '{district_id}', '{warehouse_id}', '{number}', '{item_id}', '{supply_warehouse_id}', NOW(), '{quantity}', '{amount}', '{dist_info}'),"));
         }
         sqlx::query(&sql_order_line[0..sql_order_line.len() - 1])
-            .execute(&mut **txn)
+            .execute(&mut *conn)
             .await?;
     }
     Ok(())
 }
 
-pub async fn load_items<DB>(
+pub async fn load_items<DB, E>(
     generator: ItemGenerator,
-    txn: &mut sqlx::Transaction<'_, DB>,
+    conn: &mut E,
     batch_size: usize,
-) -> Result<(), sqlx::Error>
+) -> anyhow::Result<()>
 where
     DB: Database,
-    for<'a> &'a mut DB::Connection: sqlx::Executor<'a, Database = DB>,
+    for<'a> &'a mut E: sqlx::Executor<'a, Database = DB>,
     for<'a> <DB as HasArguments<'a>>::Arguments: IntoArguments<'a, DB>,
 {
     info!("Loading items (batch size={batch_size})");
@@ -296,9 +304,10 @@ where
         ));
         if (idx + 1) % batch_size == 0 {
             sqlx::query(&sql[0..sql.len() - 1])
-                .execute(&mut **txn)
+                .execute(&mut *conn)
                 .await?;
-            sql = SQL_PREFIX.to_string();
+            sql.clear();
+            sql.push_str(SQL_PREFIX);
         }
     }
     Ok(())

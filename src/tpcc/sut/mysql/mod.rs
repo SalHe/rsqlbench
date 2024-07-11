@@ -36,12 +36,12 @@ impl MysqlSut {
 
 #[async_trait]
 impl Sut for MysqlSut {
-    async fn terminal(&self, _id: u32) -> Result<Box<dyn Terminal>, sqlx::Error> {
+    async fn terminal(&self, _id: u32) -> anyhow::Result<Box<dyn Terminal>> {
         todo!()
     }
 
     #[instrument(skip(self))]
-    async fn build_schema(&self) -> Result<(), sqlx::Error> {
+    async fn build_schema(&self) -> anyhow::Result<()> {
         let mut conn = self.build_options_for_schema().connect().await?;
         #[rustfmt::skip]
         let sql_set = [
@@ -189,11 +189,11 @@ PRIMARY KEY (`s_w_id`,`s_i_id`)
         Ok(())
     }
 
-    async fn after_loaded(&self) -> Result<(), sqlx::Error> {
+    async fn after_loaded(&self) -> anyhow::Result<()> {
         Ok(())
     }
 
-    async fn destroy_schema(&self) -> Result<(), sqlx::Error> {
+    async fn destroy_schema(&self) -> anyhow::Result<()> {
         let mut conn = self.build_options_for_schema().connect().await?;
         // Drop order must be promised due to FOREIGN_KEY_CHECKS.
         for table in [
@@ -213,7 +213,7 @@ PRIMARY KEY (`s_w_id`,`s_i_id`)
         Ok(())
     }
 
-    async fn loader(&self) -> Result<Box<dyn Loader>, sqlx::Error> {
+    async fn loader(&self) -> anyhow::Result<Box<dyn Loader>> {
         Ok(Box::new(MysqlLoader::new(
             self.build_options_for_schema().connect().await?,
         )))
