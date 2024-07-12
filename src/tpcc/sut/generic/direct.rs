@@ -39,19 +39,9 @@ where
         } = stock;
         sql.push_str(&format!("('{item_id}', '{warehouse_id}', '{quantity}', '{dist0}', '{dist1}', '{dist2}', '{dist3}', '{dist4}', '{dist5}', '{dist6}', '{dist7}', '{dist8}', '{dist9}', '{ytd}', '{order_count}', '{remote_count}', '{data}'),"));
         if stock.item_id % (batch_size as u32) == 0 {
-            info!(
-                "Executing insert stocks {stock_id} for warehouse ID={id} (batch size={batch_size})...",
-                stock_id = stock.item_id,
-                id = warehouse.id,
-            );
             sqlx::query(&sql[0..sql.len() - 1])
                 .execute(&mut *conn)
                 .await?;
-            info!(
-                "Executed insert stocks {stock_id} for warehouse ID={id} (batch size={batch_size})",
-                stock_id = stock.item_id,
-                id = warehouse.id,
-            );
             sql.clear();
             sql.push_str(SQL);
         }
