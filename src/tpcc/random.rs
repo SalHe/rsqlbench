@@ -5,6 +5,9 @@
 //! entries in sequence from a set of at least 10,000 pregenerated random numbers. This technique cannot be used for the
 //! field O_OL_CNT.
 
+use std::ops::RangeInclusive;
+
+use once_cell::sync::Lazy;
 use rand::{distributions::Alphanumeric, prelude::*};
 
 /// 4.3.2.2 The notation random a-string \[x .. y\] (respectively, n-string \[x .. y\]) represents a string of random
@@ -36,7 +39,7 @@ pub fn rand_last_name() -> String {
     static TOKENS: [&str; 10] = [
         "BAR", "OUGHT", "ABLE", "PRI", "PRES", "ESE", "ANTI", "CALLY", "ATION", "EING",
     ];
-    let index = thread_rng().gen_range(0..1000usize); // index = XYZ
+    let index = NURAND_LASTNAME.next(); // index = XYZ
     let mut name = String::with_capacity(15); // possible MAX length
     name.push_str(TOKENS[index / 100]); // X
     name.push_str(TOKENS[(index % 100) / 10]); // Y
@@ -70,3 +73,49 @@ pub fn rand_double(min: f64, max: f64, precision: isize) -> f64 {
 pub fn rand_zip() -> String {
     format!("{:04}11111", thread_rng().gen_range(0..=9999))
 }
+
+pub struct NURand {
+    const_c: usize,
+    const_a: usize,
+    range: RangeInclusive<usize>,
+}
+
+impl NURand {
+    pub fn random(&self, x: usize, y: usize) -> usize {
+        let mut rng = thread_rng();
+        ((rng.gen_range(0..=self.const_a) | (rng.gen_range(x..=y) + self.const_c)) % (y - x + 1))
+            + x
+    }
+
+    pub fn next(&self) -> usize {
+        self.random(*self.range.start(), *self.range.end())
+    }
+}
+
+pub struct NURandSpawner;
+
+impl NURandSpawner {
+    pub fn spawn(&self, const_a: usize, range: RangeInclusive<usize>) -> NURand {
+        NURand {
+            const_c: thread_rng().gen_range(0..=const_a),
+            const_a,
+            range,
+        }
+    }
+
+    pub fn nurand_customer_last(&self) -> NURand {
+        self.spawn(255, 0..=999)
+    }
+
+    pub fn nurand_customer_id(&self) -> NURand {
+        self.spawn(1023, 1..=3000)
+    }
+
+    pub fn nuran_item(&self) -> NURand {
+        self.spawn(8191, 1..=100000)
+    }
+}
+
+pub static NURAND_LASTNAME: Lazy<NURand> = Lazy::new(|| NURandSpawner.nurand_customer_last());
+pub static NURAND_CUSTOMER_ID: Lazy<NURand> = Lazy::new(|| NURandSpawner.nurand_customer_id());
+pub static NURAND_ITEM_ID: Lazy<NURand> = Lazy::new(|| NURandSpawner.nuran_item());

@@ -1,19 +1,26 @@
-use std::{ops::RangeInclusive, rc::Rc};
+use std::{collections::HashMap, rc::Rc};
 
 use anyhow::Context;
+use case_style::CaseStyle;
 use clap::{Parser, Subcommand, ValueEnum};
 use config::{Config, Environment, File};
+use rand::{thread_rng, Rng};
 use rsqlbench::{
-    cfg::{self, BenchConfig},
+    cfg::{
+        self,
+        tpcc::{TpccBenchmark, TpccTransaction},
+        BenchConfig,
+    },
     tpcc::{
         loader::Loader,
-        model::{ItemGenerator, Warehouse, WarehouseGenerator},
-        sut::{MysqlSut, Sut},
+        model::{ItemGenerator, Warehouse, WarehouseGenerator, DISTRICT_PER_WAREHOUSE},
+        sut::{MysqlSut, Sut, Terminal},
+        transaction::{Delivery, NewOrder, OrderStatus, Payment, StockLevel, Transaction},
     },
 };
 use time::{format_description::well_known::Rfc3339, UtcOffset};
-use tokio::task::JoinSet;
-use tracing::{info, instrument, level_filters::LevelFilter, warn};
+use tokio::{task::JoinSet, time::sleep};
+use tracing::{debug, info, instrument, level_filters::LevelFilter, trace, warn};
 use tracing_subscriber::{fmt::time::OffsetTime, EnvFilter};
 
 #[instrument(skip(loader, rx))]
@@ -24,16 +31,6 @@ async fn load_warehouse(
 ) -> anyhow::Result<()> {
     let mut loader = loader;
     loader.load_warehouses(rx).await
-}
-
-#[instrument(skip(loader))]
-async fn load_items(
-    loader: Box<dyn Loader>,
-    loader_id: usize,
-    range: RangeInclusive<u32>,
-) -> anyhow::Result<()> {
-    let mut loader = loader;
-    loader.load_items(ItemGenerator::new(range)).await
 }
 
 #[instrument(skip(sut))]
@@ -74,6 +71,109 @@ async fn load_all_warehouses(
         j??
     }
     info!("Warehouses loaded.");
+    Ok(())
+}
+
+#[instrument(skip(terminal))]
+async fn tpcc_benchmark(
+    terminal: Box<dyn Terminal>,
+    terminal_id: usize,
+    warehouse_id: u32,
+    district_id: u8,
+    warehouse_count: u32,
+    tx_weights: TpccTransaction,
+) -> anyhow::Result<()> {
+    trace!("Begin benchmarking");
+    loop {
+        // TODO stop
+        let picker = thread_rng().gen_range(0.0..=100.0);
+        let tx = if picker < tx_weights.payment {
+            Transaction::Payment(Payment::generate(
+                warehouse_id,
+                warehouse_count,
+                district_id,
+            ))
+        } else if picker < tx_weights.payment + tx_weights.order_status {
+            Transaction::OrderStatus(OrderStatus::generate(warehouse_id))
+        } else if picker < tx_weights.payment + tx_weights.order_status + tx_weights.delivery {
+            Transaction::Delivery(Delivery::generate(warehouse_id))
+        } else if picker
+            < tx_weights.payment
+                + tx_weights.order_status
+                + tx_weights.delivery
+                + tx_weights.stock_level
+        {
+            Transaction::StockLevel(StockLevel::generate(warehouse_id, district_id))
+        } else {
+            Transaction::NewOrder(NewOrder::generate(warehouse_id, warehouse_count))
+        };
+        sleep(tx.keying_duration()).await;
+        debug!(?tx, "Perform transaction");
+        terminal.execute(&tx).await?;
+        sleep(tx.thinking_duration()).await;
+    }
+    // trace!("Benchmark finished");
+    // Ok(())
+}
+
+#[instrument(skip(sut))]
+async fn begin_benchmark(
+    warehouses: usize,
+    sut: Rc<Box<dyn Sut>>,
+    tpcc: &TpccBenchmark,
+) -> anyhow::Result<()> {
+    let transactions = &tpcc.transactions;
+
+    // Check weights
+    let small_weight = if let Err(cfg::tpcc::Error::SmallWeight(list)) = transactions.verify() {
+        list.into_iter()
+            .map(|(tx, minimal)| (CaseStyle::guess(tx).unwrap().to_pascalcase(), minimal))
+            .collect::<HashMap<String, f32>>()
+    } else {
+        HashMap::new()
+    };
+    for (tx, percents) in [
+        ("NewOrder", transactions.new_order_weight()),
+        ("Payment", transactions.payment),
+        ("OrderStatus", transactions.order_status),
+        ("Delivery", transactions.stock_level),
+        ("StockLevel", transactions.stock_level),
+    ] {
+        if let Some((_, minimal_percents)) = small_weight.get_key_value(tx) {
+            warn!(minimal_percents, "Transaction {tx} weight = {percents:.2}%");
+        } else {
+            info!("Transaction {tx} weight = {percents:.2}% √");
+        }
+    }
+
+    // Check terminals' unique warehouse/district pair
+    if tpcc.terminals > (warehouses * DISTRICT_PER_WAREHOUSE) as _ {
+        warn!(
+            terminals = tpcc.terminals,
+            warehouses, "There are too much terminals so that Clause-2.8.1.1 won't be satisfied."
+        );
+    }
+
+    // Spawn terminals.
+    let mut join_set = JoinSet::new();
+    for terminal_id in 0..tpcc.terminals {
+        let in_range_id = terminal_id % (warehouses * DISTRICT_PER_WAREHOUSE);
+        let warehouse_id = (in_range_id / DISTRICT_PER_WAREHOUSE) + 1;
+        let district_id = (in_range_id % DISTRICT_PER_WAREHOUSE) + 1;
+        join_set.spawn(tpcc_benchmark(
+            sut.terminal(terminal_id as _).await?,
+            terminal_id,
+            warehouse_id as u32,
+            district_id as u8,
+            warehouses as _,
+            tpcc.transactions.clone(),
+        ));
+    }
+
+    while let Some(j) = join_set.join_next().await {
+        j??
+    }
+
     Ok(())
 }
 
@@ -122,7 +222,7 @@ async fn main() -> anyhow::Result<()> {
         .with_env_filter(
             EnvFilter::builder()
                 .with_default_directive(LevelFilter::INFO.into())
-                .parse("")?,
+                .from_env_lossy(),
         )
         .with_timer(
             OffsetTime::local_rfc_3339()
@@ -156,7 +256,10 @@ async fn main() -> anyhow::Result<()> {
                 sut.after_loaded().await?;
             }
             TpccCommand::Benchmark => {
-                warn!("not implemented!");
+                info!("Prepare to benchmark...");
+                begin_benchmark(cfg.loader.warehouse as _, sut.clone(), &cfg.benchmark.tpcc)
+                    .await?;
+                info!("Benchmark finished...");
             }
             TpccCommand::Destroy => {
                 info!("Destroying schema...");

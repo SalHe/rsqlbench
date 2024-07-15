@@ -1,4 +1,5 @@
 mod loader;
+mod terminal;
 
 use crate::cfg::Connection;
 use crate::tpcc::loader::Loader;
@@ -7,6 +8,7 @@ use loader::MysqlLoader;
 use sqlx::mysql::MySqlConnectOptions;
 
 use sqlx::{ConnectOptions, Executor, MySqlConnection};
+use terminal::MysqlTerminal;
 use tracing::instrument;
 
 use super::{Sut, Terminal};
@@ -564,7 +566,7 @@ END
 #[async_trait]
 impl Sut for MysqlSut {
     async fn terminal(&self, _id: u32) -> anyhow::Result<Box<dyn Terminal>> {
-        todo!()
+        Ok(Box::new(MysqlTerminal {}))
     }
 
     #[instrument(skip(self))]

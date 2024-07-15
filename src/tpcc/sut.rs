@@ -25,28 +25,8 @@ pub trait Sut {
     async fn loader(&self) -> anyhow::Result<Box<dyn Loader>>;
 }
 
-pub trait Terminal {
+#[async_trait]
+pub trait Terminal: Send {
     /// Execute a transaction.
-    fn execute(&self, tx: Transaction);
+    async fn execute(&self, tx: &Transaction) -> anyhow::Result<()>;
 }
-
-// #[derive(Debug)]
-// pub struct FakeSut;
-
-// impl Sut for FakeSut {
-//     #[instrument]
-//     async fn terminal(&self, id: u32) -> Box<dyn Terminal> {
-//         todo!()
-//     }
-
-//     #[instrument]
-//     async fn build_schema(&self) {}
-
-//     #[instrument]
-//     async fn destroy_schema(&self) {}
-
-//     #[instrument]
-//     async fn loader(&self) -> Box<dyn Loader> {
-//         Box::new(FakeLoader)
-//     }
-// }
