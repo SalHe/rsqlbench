@@ -150,6 +150,8 @@ async fn begin_benchmark(
     } else {
         HashMap::new()
     };
+
+    let mut weight_proper = true;
     for (tx, percents) in [
         ("NewOrder", transactions.new_order_weight()),
         ("Payment", transactions.payment),
@@ -158,10 +160,17 @@ async fn begin_benchmark(
         ("StockLevel", transactions.stock_level),
     ] {
         if let Some((_, minimal_percents)) = small_weight.get_key_value(tx) {
+            weight_proper = false;
             warn!(minimal_percents, "Transaction {tx} weight = {percents:.2}%");
         } else {
             info!("Transaction {tx} weight = {percents:.2}% √");
         }
+    }
+
+    if weight_proper {
+        info!("Transaction weights passed.")
+    } else {
+        warn!("Transaction weights got some problems.")
     }
 
     // Check terminals' unique warehouse/district pair
