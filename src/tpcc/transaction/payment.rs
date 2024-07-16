@@ -1,8 +1,8 @@
 use rand::{thread_rng, Rng};
 
 use crate::tpcc::{
-    model::{CUSTOMER_PER_DISTRICT, DISTRICT_PER_WAREHOUSE},
-    random::{rand_double, rand_last_name},
+    model::DISTRICT_PER_WAREHOUSE,
+    random::{rand_double, rand_last_name, NURAND_CUSTOMER_ID},
 };
 
 #[derive(Debug)]
@@ -60,7 +60,7 @@ impl CustomerSelector {
         if thread_rng().gen_bool(0.6) {
             CustomerSelector::LastName(rand_last_name())
         } else {
-            CustomerSelector::ID(thread_rng().gen_range(1..=CUSTOMER_PER_DISTRICT) as _)
+            CustomerSelector::ID(NURAND_CUSTOMER_ID.next() as _)
         }
     }
 }

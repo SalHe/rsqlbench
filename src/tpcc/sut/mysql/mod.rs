@@ -9,7 +9,7 @@ use sqlx::mysql::MySqlConnectOptions;
 
 use sqlx::{ConnectOptions, Executor, MySqlConnection};
 use terminal::MysqlTerminal;
-use tracing::instrument;
+use tracing::{info, instrument};
 
 use super::{Sut, Terminal};
 
@@ -174,7 +174,7 @@ BEGIN
                     no_ol_dist_info);
             set loop_counter = loop_counter + 1;
         END WHILE;
-    INSERT INTO orders (o_id, o_d_id, o_w_id, o_c_id, o_entry_d, o_ol_cnt, o_all_local)
+    INSERT INTO oorder (o_id, o_d_id, o_w_id, o_c_id, o_entry_d, o_ol_cnt, o_all_local)
     VALUES (o_id, no_d_id, no_w_id, no_c_id, timestamp, no_o_ol_cnt, no_o_all_local);
     INSERT INTO new_order (no_o_id, no_d_id, no_w_id) VALUES (o_id, no_d_id, no_w_id);
     COMMIT;
@@ -206,11 +206,11 @@ BEGIN
             DELETE FROM new_order WHERE no_w_id = d_w_id AND no_d_id = d_d_id AND no_o_id = d_no_o_id;
             SELECT o_c_id
             INTO d_c_id
-            FROM orders
+            FROM oorder
             WHERE o_id = d_no_o_id
               AND o_d_id = d_d_id
               AND o_w_id = d_w_id;
-            UPDATE orders
+            UPDATE oorder
             SET o_carrier_id = d_o_carrier_id
             WHERE o_id = d_no_o_id
               AND o_d_id = d_d_id
@@ -492,7 +492,7 @@ BEGIN
     SELECT o_id, o_carrier_id, o_entry_d
     INTO os_o_id, os_o_carrier_id, os_entdate
     FROM (SELECT o_id, o_carrier_id, o_entry_d
-          FROM orders
+          FROM oorder
           where o_d_id = os_d_id
             AND o_w_id = os_w_id
             and o_c_id = os_c_id
@@ -556,9 +556,11 @@ BEGIN
 END
 "#,
         ];
+        info!("Creating stored procs...");
         for sql in sql_set {
             conn.execute(sql).await?;
         }
+        info!("Stored procs created.");
         Ok(())
     }
 }
@@ -566,7 +568,9 @@ END
 #[async_trait]
 impl Sut for MysqlSut {
     async fn terminal(&self, _id: u32) -> anyhow::Result<Box<dyn Terminal>> {
-        Ok(Box::new(MysqlTerminal {}))
+        Ok(Box::new(MysqlTerminal::new(
+            self.build_options_for_schema().connect().await?,
+        )))
     }
 
     #[instrument(skip(self))]

@@ -30,11 +30,11 @@ pub trait Sut {
 
 #[async_trait]
 pub trait Terminal: Send {
-    async fn new_order(&self, input: &NewOrder) -> anyhow::Result<TerminalResult>;
-    async fn payment(&self, input: &Payment) -> anyhow::Result<()>;
-    async fn order_status(&self, input: &OrderStatus) -> anyhow::Result<()>;
-    async fn delivery(&self, input: &Delivery) -> anyhow::Result<()>;
-    async fn stock_level(&self, input: &StockLevel) -> anyhow::Result<()>;
+    async fn new_order(&mut self, input: &NewOrder) -> anyhow::Result<TerminalResult>;
+    async fn payment(&mut self, input: &Payment) -> anyhow::Result<()>;
+    async fn order_status(&mut self, input: &OrderStatus) -> anyhow::Result<()>;
+    async fn delivery(&mut self, input: &Delivery) -> anyhow::Result<()>;
+    async fn stock_level(&mut self, input: &StockLevel) -> anyhow::Result<()>;
 }
 
 pub enum TerminalResult<T = ()> {

@@ -2,7 +2,7 @@ use rand::{thread_rng, Rng};
 
 use crate::tpcc::{
     model::{DISTRICT_PER_WAREHOUSE, MAX_ITEMS},
-    random::NURAND_ITEM_ID,
+    random::{NURAND_CUSTOMER_ID, NURAND_ITEM_ID},
 };
 
 #[derive(Debug)]
@@ -10,6 +10,7 @@ pub struct NewOrder {
     pub warehouse_id: u32,
     pub district_id: u8,
     pub rollback_last: bool,
+    pub customer_id: u32,
     pub order_lines: Vec<NewOrderLine>,
 }
 
@@ -40,6 +41,7 @@ impl NewOrder {
             warehouse_id,
             district_id: thread_rng().gen_range(1..=(DISTRICT_PER_WAREHOUSE as u8)),
             rollback_last,
+            customer_id: NURAND_CUSTOMER_ID.next() as _,
             order_lines,
         }
     }

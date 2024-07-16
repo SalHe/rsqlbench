@@ -94,6 +94,7 @@ async fn tpcc_benchmark(
     tx_weights: TpccTransaction,
     keying: bool,
 ) -> anyhow::Result<()> {
+    let mut terminal = terminal;
     trace!("Begin benchmarking");
     loop {
         // TODO stop
@@ -167,7 +168,7 @@ async fn begin_benchmark(
     if tpcc.terminals > (warehouses * DISTRICT_PER_WAREHOUSE) as _ {
         warn!(
             terminals = tpcc.terminals,
-            warehouses, "There are too much terminals so that Clause-2.8.1.1 won't be satisfied."
+            warehouses, "There are too many terminals so that Clause-2.8.1.1 won't be satisfied."
         );
     }
 
