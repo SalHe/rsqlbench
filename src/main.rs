@@ -110,27 +110,23 @@ async fn tpcc_benchmark(
                     rsqlbench::tpcc::sut::TerminalResult::Rollbacked => {}
                     rsqlbench::tpcc::sut::TerminalResult::Executed(_) => {
                         TOTAL_NEW_ORDERS.fetch_add(1, Ordering::SeqCst);
-                        TOTAL_TRANSACTIONS.fetch_add(1, Ordering::SeqCst);
                     }
                 };
             }
             Transaction::Payment(input) => {
                 terminal.payment(input).await?;
-                TOTAL_TRANSACTIONS.fetch_add(1, Ordering::SeqCst);
             }
             Transaction::OrderStatus(input) => {
                 terminal.order_status(input).await?;
-                TOTAL_TRANSACTIONS.fetch_add(1, Ordering::SeqCst);
             }
             Transaction::Delivery(input) => {
                 terminal.delivery(input).await?;
-                TOTAL_TRANSACTIONS.fetch_add(1, Ordering::SeqCst);
             }
             Transaction::StockLevel(input) => {
                 terminal.stock_level(input).await?;
-                TOTAL_TRANSACTIONS.fetch_add(1, Ordering::SeqCst);
             }
         }
+        TOTAL_TRANSACTIONS.fetch_add(1, Ordering::SeqCst);
         if keying {
             sleep(tx.thinking_duration()).await;
         }
