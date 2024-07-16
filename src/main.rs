@@ -32,6 +32,7 @@ use tracing::{debug, info, instrument, level_filters::LevelFilter, trace, warn};
 use tracing_subscriber::{fmt::time::OffsetTime, EnvFilter};
 
 static TOTAL_NEW_ORDERS: AtomicU64 = AtomicU64::new(0);
+static TOTAL_TRANSACTIONS: AtomicU64 = AtomicU64::new(0);
 
 #[instrument(skip(loader, rx))]
 async fn load_warehouse(
@@ -109,20 +110,25 @@ async fn tpcc_benchmark(
                     rsqlbench::tpcc::sut::TerminalResult::Rollbacked => {}
                     rsqlbench::tpcc::sut::TerminalResult::Executed(_) => {
                         TOTAL_NEW_ORDERS.fetch_add(1, Ordering::SeqCst);
+                        TOTAL_TRANSACTIONS.fetch_add(1, Ordering::SeqCst);
                     }
                 };
             }
             Transaction::Payment(input) => {
                 terminal.payment(input).await?;
+                TOTAL_TRANSACTIONS.fetch_add(1, Ordering::SeqCst);
             }
             Transaction::OrderStatus(input) => {
                 terminal.order_status(input).await?;
+                TOTAL_TRANSACTIONS.fetch_add(1, Ordering::SeqCst);
             }
             Transaction::Delivery(input) => {
                 terminal.delivery(input).await?;
+                TOTAL_TRANSACTIONS.fetch_add(1, Ordering::SeqCst);
             }
             Transaction::StockLevel(input) => {
                 terminal.stock_level(input).await?;
+                TOTAL_TRANSACTIONS.fetch_add(1, Ordering::SeqCst);
             }
         }
         if keying {
@@ -205,11 +211,14 @@ async fn begin_benchmark(
         select! {
             _ = ticker.tick() => {
                 let total_new_orders = TOTAL_NEW_ORDERS.load(Ordering::SeqCst);
+                let total_transactions = TOTAL_TRANSACTIONS.load(Ordering::SeqCst);
                 minutes += 1;
                 info!(
-                    total_new_orders,
                     minutes,
+                    total_new_orders,
+                    total_transactions,
                     tpmC = (total_new_orders as f64) / (minutes as f64),
+                    tpmC_all_tx = (total_transactions as f64) / (minutes as f64),
                 );
             }
             joined = join_set.join_next() => {
