@@ -5,7 +5,10 @@ use async_trait::async_trait;
 pub use generic::*;
 pub use mysql::*;
 
-use super::{loader::Loader, transaction::Transaction};
+use super::{
+    loader::Loader,
+    transaction::{Delivery, NewOrder, OrderStatus, Payment, StockLevel},
+};
 
 #[async_trait]
 pub trait Sut {
@@ -27,6 +30,14 @@ pub trait Sut {
 
 #[async_trait]
 pub trait Terminal: Send {
-    /// Execute a transaction.
-    async fn execute(&self, tx: &Transaction) -> anyhow::Result<()>;
+    async fn new_order(&self, input: &NewOrder) -> anyhow::Result<TerminalResult>;
+    async fn payment(&self, input: &Payment) -> anyhow::Result<()>;
+    async fn order_status(&self, input: &OrderStatus) -> anyhow::Result<()>;
+    async fn delivery(&self, input: &Delivery) -> anyhow::Result<()>;
+    async fn stock_level(&self, input: &StockLevel) -> anyhow::Result<()>;
+}
+
+pub enum TerminalResult<T = ()> {
+    Rollbacked,
+    Executed(T),
 }

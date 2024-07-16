@@ -1,10 +1,14 @@
-use std::{collections::HashMap, rc::Rc};
+use std::{
+    collections::HashMap,
+    rc::Rc,
+    sync::atomic::{AtomicU64, Ordering},
+    time::Duration,
+};
 
 use anyhow::Context;
 use case_style::CaseStyle;
 use clap::{Parser, Subcommand, ValueEnum};
 use config::{Config, Environment, File};
-use rand::{thread_rng, Rng};
 use rsqlbench::{
     cfg::{
         self,
@@ -15,13 +19,19 @@ use rsqlbench::{
         loader::Loader,
         model::{ItemGenerator, Warehouse, WarehouseGenerator, DISTRICT_PER_WAREHOUSE},
         sut::{MysqlSut, Sut, Terminal},
-        transaction::{Delivery, NewOrder, OrderStatus, Payment, StockLevel, Transaction},
+        transaction::Transaction,
     },
 };
 use time::{format_description::well_known::Rfc3339, UtcOffset};
-use tokio::{task::JoinSet, time::sleep};
+use tokio::{
+    select,
+    task::{yield_now, JoinSet},
+    time::{interval_at, sleep, Instant},
+};
 use tracing::{debug, info, instrument, level_filters::LevelFilter, trace, warn};
 use tracing_subscriber::{fmt::time::OffsetTime, EnvFilter};
+
+static TOTAL_NEW_ORDERS: AtomicU64 = AtomicU64::new(0);
 
 #[instrument(skip(loader, rx))]
 async fn load_warehouse(
@@ -82,35 +92,42 @@ async fn tpcc_benchmark(
     district_id: u8,
     warehouse_count: u32,
     tx_weights: TpccTransaction,
+    keying: bool,
 ) -> anyhow::Result<()> {
     trace!("Begin benchmarking");
     loop {
         // TODO stop
-        let picker = thread_rng().gen_range(0.0..=100.0);
-        let tx = if picker < tx_weights.payment {
-            Transaction::Payment(Payment::generate(
-                warehouse_id,
-                warehouse_count,
-                district_id,
-            ))
-        } else if picker < tx_weights.payment + tx_weights.order_status {
-            Transaction::OrderStatus(OrderStatus::generate(warehouse_id))
-        } else if picker < tx_weights.payment + tx_weights.order_status + tx_weights.delivery {
-            Transaction::Delivery(Delivery::generate(warehouse_id))
-        } else if picker
-            < tx_weights.payment
-                + tx_weights.order_status
-                + tx_weights.delivery
-                + tx_weights.stock_level
-        {
-            Transaction::StockLevel(StockLevel::generate(warehouse_id, district_id))
-        } else {
-            Transaction::NewOrder(NewOrder::generate(warehouse_id, warehouse_count))
-        };
-        sleep(tx.keying_duration()).await;
+        let tx = Transaction::generate(&tx_weights, warehouse_id, district_id, warehouse_count);
+        if keying {
+            sleep(tx.keying_duration()).await;
+        }
         debug!(?tx, "Perform transaction");
-        terminal.execute(&tx).await?;
-        sleep(tx.thinking_duration()).await;
+        match &tx {
+            Transaction::NewOrder(input) => {
+                match terminal.new_order(input).await? {
+                    rsqlbench::tpcc::sut::TerminalResult::Rollbacked => {}
+                    rsqlbench::tpcc::sut::TerminalResult::Executed(_) => {
+                        TOTAL_NEW_ORDERS.fetch_add(1, Ordering::SeqCst);
+                    }
+                };
+            }
+            Transaction::Payment(input) => {
+                terminal.payment(input).await?;
+            }
+            Transaction::OrderStatus(input) => {
+                terminal.order_status(input).await?;
+            }
+            Transaction::Delivery(input) => {
+                terminal.delivery(input).await?;
+            }
+            Transaction::StockLevel(input) => {
+                terminal.stock_level(input).await?;
+            }
+        }
+        if keying {
+            sleep(tx.thinking_duration()).await;
+        }
+        yield_now().await;
     }
     // trace!("Benchmark finished");
     // Ok(())
@@ -167,9 +184,36 @@ async fn begin_benchmark(
             district_id as u8,
             warehouses as _,
             tpcc.transactions.clone(),
+            tpcc.keying_and_thinking,
         ));
     }
 
+    let one_minute = Duration::from_secs(60);
+    let mut ticker = interval_at(Instant::now() + one_minute, one_minute);
+    let mut minutes = 0;
+    loop {
+        select! {
+            _ = ticker.tick() => {
+                let total_new_orders = TOTAL_NEW_ORDERS.load(Ordering::SeqCst);
+                minutes += 1;
+                info!(
+                    total_new_orders,
+                    minutes,
+                    tpmC = (total_new_orders as f64) / (minutes as f64),
+                );
+            }
+            joined = join_set.join_next() => {
+                match joined {
+                    Some(j) => {
+                        j??;
+                    },
+                    None=>{
+                        break;
+                    }
+                }
+            }
+        }
+    }
     while let Some(j) = join_set.join_next().await {
         j??
     }

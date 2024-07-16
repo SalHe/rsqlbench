@@ -2,6 +2,7 @@ use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 pub struct TpccBenchmark {
+    pub keying_and_thinking: bool,
     pub terminals: usize,
     pub transactions: TpccTransaction,
 }
