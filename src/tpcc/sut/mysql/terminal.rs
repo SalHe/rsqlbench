@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use sqlx::MySqlConnection;
 
 use crate::tpcc::{
-    sut::{Terminal, TerminalResult},
+    sut::Terminal,
     transaction::{CustomerSelector, Delivery, NewOrder, OrderStatus, Payment, StockLevel},
 };
 
@@ -19,7 +19,7 @@ impl MysqlTerminal {
 // TODO reimplement stored procs
 #[async_trait]
 impl Terminal for MysqlTerminal {
-    async fn new_order(&mut self, input: &NewOrder) -> anyhow::Result<TerminalResult> {
+    async fn new_order(&mut self, input: &NewOrder) -> anyhow::Result<()> {
         sqlx::query("set @next_order_id = 10000")
             .execute(&mut self.conn)
             .await?;
@@ -35,7 +35,7 @@ impl Terminal for MysqlTerminal {
             ))
             .execute(&mut self.conn)
             .await?;
-        Ok(TerminalResult::Executed(()))
+        Ok(())
     }
 
     async fn payment(&mut self, input: &Payment) -> anyhow::Result<()> {

@@ -106,12 +106,11 @@ async fn tpcc_benchmark(
         debug!(?tx, "Perform transaction");
         match &tx {
             Transaction::NewOrder(input) => {
-                match terminal.new_order(input).await? {
-                    rsqlbench::tpcc::sut::TerminalResult::Rollbacked => {}
-                    rsqlbench::tpcc::sut::TerminalResult::Executed(_) => {
-                        TOTAL_NEW_ORDERS.fetch_add(1, Ordering::SeqCst);
-                    }
-                };
+                trace!(%input);
+                terminal.new_order(input).await?;
+                if !input.rollback_last {
+                    TOTAL_NEW_ORDERS.fetch_add(1, Ordering::SeqCst);
+                }
             }
             Transaction::Payment(input) => {
                 terminal.payment(input).await?;
@@ -213,8 +212,8 @@ async fn begin_benchmark(
                     minutes,
                     total_new_orders,
                     total_transactions,
-                    tpmC = (total_new_orders as f64) / (minutes as f64),
-                    tpmC_all_tx = (total_transactions as f64) / (minutes as f64),
+                    tpmC_NewOrder = (total_new_orders as f64) / (minutes as f64),
+                    tpmTOTAL = (total_transactions as f64) / (minutes as f64),
                 );
             }
             joined = join_set.join_next() => {

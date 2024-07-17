@@ -30,14 +30,13 @@ pub trait Sut {
 
 #[async_trait]
 pub trait Terminal: Send {
-    async fn new_order(&mut self, input: &NewOrder) -> anyhow::Result<TerminalResult>;
+    async fn new_order(&mut self, input: &NewOrder) -> anyhow::Result<()>;
     async fn payment(&mut self, input: &Payment) -> anyhow::Result<()>;
     async fn order_status(&mut self, input: &OrderStatus) -> anyhow::Result<()>;
     async fn delivery(&mut self, input: &Delivery) -> anyhow::Result<()>;
     async fn stock_level(&mut self, input: &StockLevel) -> anyhow::Result<()>;
 }
 
-pub enum TerminalResult<T = ()> {
-    Rollbacked,
-    Executed(T),
-}
+pub const TERMINAL_WIDTH: usize = 80;
+pub const TERMINAL_HEIGHT: usize = 24;
+pub const TERMINAL_BUFFER_LEN: usize = TERMINAL_HEIGHT * (TERMINAL_WIDTH + 1);
