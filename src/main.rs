@@ -5,7 +5,7 @@ use std::{
     time::Duration,
 };
 
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 use case_style::CaseStyle;
 use clap::{Parser, Subcommand, ValueEnum};
 use config::{Config, Environment, File};
@@ -25,10 +25,11 @@ use rsqlbench::{
 use time::{format_description::well_known::Rfc3339, UtcOffset};
 use tokio::{
     select,
+    sync::broadcast,
     task::{yield_now, JoinSet},
     time::{interval_at, sleep, Instant},
 };
-use tracing::{debug, info, instrument, level_filters::LevelFilter, trace, warn};
+use tracing::{debug, error, info, instrument, level_filters::LevelFilter, trace, warn};
 use tracing_subscriber::{fmt::time::OffsetTime, EnvFilter};
 
 static TOTAL_NEW_ORDERS: AtomicU64 = AtomicU64::new(0);
@@ -85,7 +86,8 @@ async fn load_all_warehouses(
     Ok(())
 }
 
-#[instrument(skip(terminal))]
+#[allow(clippy::too_many_arguments)] // TODO
+#[instrument(skip(terminal, rx_stop))]
 async fn tpcc_benchmark(
     terminal: Box<dyn Terminal>,
     terminal_id: usize,
@@ -94,12 +96,16 @@ async fn tpcc_benchmark(
     warehouse_count: u32,
     tx_weights: TpccTransaction,
     keying: bool,
+    rx_stop: broadcast::Receiver<()>,
 ) -> anyhow::Result<()> {
+    let mut rx_stop = rx_stop;
     let mut terminal = terminal;
     trace!("Begin benchmarking");
     loop {
-        // TODO stop
         let tx = Transaction::generate(&tx_weights, warehouse_id, district_id, warehouse_count);
+        if rx_stop.try_recv().is_ok() {
+            break;
+        }
         if keying {
             sleep(tx.keying_duration()).await;
         }
@@ -131,19 +137,12 @@ async fn tpcc_benchmark(
         }
         yield_now().await;
     }
-    // trace!("Benchmark finished");
-    // Ok(())
+    trace!("Benchmark finished");
+    Ok(())
 }
 
-#[instrument(skip(sut))]
-async fn begin_benchmark(
-    warehouses: usize,
-    sut: Rc<Box<dyn Sut>>,
-    tpcc: &TpccBenchmark,
-) -> anyhow::Result<()> {
+fn check_weight(tpcc: &TpccBenchmark, warehouses: usize) -> anyhow::Result<()> {
     let transactions = &tpcc.transactions;
-
-    // Check weights
     let small_weight = if let Err(cfg::tpcc::Error::SmallWeight(list)) = transactions.verify() {
         list.into_iter()
             .map(|(tx, minimal)| (CaseStyle::guess(tx).unwrap().to_pascalcase(), minimal))
@@ -162,6 +161,10 @@ async fn begin_benchmark(
     ] {
         if let Some((_, minimal_percents)) = small_weight.get_key_value(tx) {
             weight_proper = false;
+            if percents < 0.0 {
+                error!("You must be kidding: Transaction {tx} weight = {percents:.2}%");
+                return Err(anyhow!("Negative weight {percents:.2}% for {tx}"));
+            }
             warn!(minimal_percents, "Transaction {tx} weight = {percents:.2}%");
         } else {
             info!("Transaction {tx} weight = {percents:.2}% √");
@@ -181,8 +184,15 @@ async fn begin_benchmark(
             warehouses, "There are too many terminals so that Clause-2.8.1.1 won't be satisfied."
         );
     }
+    Ok(())
+}
 
-    // Spawn terminals.
+async fn spawn_terminals(
+    warehouses: usize,
+    sut: Rc<Box<dyn Sut>>,
+    tpcc: &TpccBenchmark,
+    tx_stop: &broadcast::Sender<()>,
+) -> anyhow::Result<JoinSet<Result<(), anyhow::Error>>> {
     let mut join_set = JoinSet::new();
     for terminal_id in 0..tpcc.terminals {
         let in_range_id = terminal_id % (warehouses * DISTRICT_PER_WAREHOUSE);
@@ -196,25 +206,47 @@ async fn begin_benchmark(
             warehouses as _,
             tpcc.transactions.clone(),
             tpcc.keying_and_thinking,
+            tx_stop.subscribe(),
         ));
     }
+    Ok(join_set)
+}
 
+async fn wait_for_benchmark(
+    tpcc: &TpccBenchmark,
+    join_set: JoinSet<Result<(), anyhow::Error>>,
+    tx_stop: broadcast::Sender<()>,
+) -> anyhow::Result<()> {
+    let mut join_set = join_set;
     let one_minute = Duration::from_secs(60);
+    let mut ramp_up: Option<(u64, u64)> = None;
     let mut ticker = interval_at(Instant::now() + one_minute, one_minute);
     let mut minutes = 0;
     loop {
         select! {
             _ = ticker.tick() => {
-                let total_new_orders = TOTAL_NEW_ORDERS.load(Ordering::SeqCst);
-                let total_transactions = TOTAL_TRANSACTIONS.load(Ordering::SeqCst);
+                let mut total_new_orders = TOTAL_NEW_ORDERS.load(Ordering::SeqCst);
+                let mut total_transactions = TOTAL_TRANSACTIONS.load(Ordering::SeqCst);
+                if let Some((no, tx)) = ramp_up {
+                    total_new_orders -= no;
+                    total_transactions -= tx;
+                }
                 minutes += 1;
                 info!(
                     minutes,
                     total_new_orders,
                     total_transactions,
+                    baking = ramp_up.is_some(),
                     tpmC_NewOrder = (total_new_orders as f64) / (minutes as f64),
                     tpmTOTAL = (total_transactions as f64) / (minutes as f64),
                 );
+                if minutes == tpcc.ramp_up {
+                    info!("Ramp up finished");
+                    ramp_up = Some((total_new_orders, total_transactions));
+                } else if minutes == tpcc.ramp_up + tpcc.baking {
+                    tx_stop.send(()).unwrap();
+                    break;
+                }
             }
             joined = join_set.join_next() => {
                 match joined {
@@ -231,7 +263,19 @@ async fn begin_benchmark(
     while let Some(j) = join_set.join_next().await {
         j??
     }
+    Ok(())
+}
 
+#[instrument(skip(sut))]
+async fn benchmark(
+    warehouses: usize,
+    sut: Rc<Box<dyn Sut>>,
+    tpcc: &TpccBenchmark,
+) -> anyhow::Result<()> {
+    check_weight(tpcc, warehouses)?;
+    let (tx_stop, _) = broadcast::channel::<()>(1);
+    let join_set = spawn_terminals(warehouses, sut, tpcc, &tx_stop).await?;
+    wait_for_benchmark(tpcc, join_set, tx_stop).await?;
     Ok(())
 }
 
@@ -315,9 +359,8 @@ async fn main() -> anyhow::Result<()> {
             }
             TpccCommand::Benchmark => {
                 info!("Prepare to benchmark...");
-                begin_benchmark(cfg.loader.warehouse as _, sut.clone(), &cfg.benchmark.tpcc)
-                    .await?;
-                info!("Benchmark finished...");
+                benchmark(cfg.loader.warehouse as _, sut.clone(), &cfg.benchmark.tpcc).await?;
+                info!("Benchmark finished.");
             }
             TpccCommand::Destroy => {
                 info!("Destroying schema...");
