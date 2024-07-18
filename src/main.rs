@@ -219,7 +219,11 @@ async fn wait_for_benchmark(
 ) -> anyhow::Result<()> {
     let mut join_set = join_set;
     let one_minute = Duration::from_secs(60);
-    let mut ramp_up: Option<(u64, u64)> = None;
+    let mut ramp_up: Option<(u64, u64)> = if tpcc.ramp_up == 0 {
+        Some((0, 0))
+    } else {
+        None
+    };
     let mut ticker = interval_at(Instant::now() + one_minute, one_minute);
     let mut minutes = 0;
     loop {
@@ -240,10 +244,11 @@ async fn wait_for_benchmark(
                     tpmC_NewOrder = (total_new_orders as f64) / (minutes as f64),
                     tpmTOTAL = (total_transactions as f64) / (minutes as f64),
                 );
-                if minutes == tpcc.ramp_up {
+                if minutes == tpcc.ramp_up && ramp_up.is_none() {
                     info!("Ramp up finished");
                     ramp_up = Some((total_new_orders, total_transactions));
-                } else if minutes == tpcc.ramp_up + tpcc.baking {
+                    minutes = 0;
+                } else if minutes == tpcc.baking && ramp_up.is_some() {
                     tx_stop.send(()).unwrap();
                     break;
                 }
@@ -260,13 +265,31 @@ async fn wait_for_benchmark(
             }
         }
     }
+
+    let (total_new_orders, total_transactions) = ramp_up.unwrap();
+    info!(
+        total_new_orders,
+        total_transactions,
+        tpmC_NewOrder = (total_new_orders as f64) / (tpcc.ramp_up as f64),
+        tpmTOTAL = (total_transactions as f64) / (tpcc.ramp_up as f64),
+        "Result during Ramp up"
+    );
+    let total_new_orders = TOTAL_NEW_ORDERS.load(Ordering::SeqCst);
+    let total_transactions = TOTAL_TRANSACTIONS.load(Ordering::SeqCst);
+    info!(
+        total_new_orders,
+        total_transactions,
+        tpmC_NewOrder = (total_new_orders as f64) / (tpcc.baking as f64),
+        tpmTOTAL = (total_transactions as f64) / (tpcc.baking as f64),
+        "Result for Benchmark"
+    );
     while let Some(j) = join_set.join_next().await {
         j??
     }
     Ok(())
 }
 
-#[instrument(skip(sut))]
+#[instrument(skip(sut, tpcc))]
 async fn benchmark(
     warehouses: usize,
     sut: Rc<Box<dyn Sut>>,
@@ -339,6 +362,8 @@ async fn main() -> anyhow::Result<()> {
         .with_context(|| "Could not load config properly.")?
         .try_deserialize()
         .with_context(|| "Could not deserialize config file.")?;
+
+    info!(?cfg, "Using config");
 
     let sut: Rc<Box<dyn Sut>> = match cli.db {
         Database::Mysql => Rc::new(Box::new(MysqlSut::new(cfg.connection))),
