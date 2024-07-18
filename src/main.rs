@@ -274,8 +274,8 @@ async fn wait_for_benchmark(
         tpmTOTAL = (total_transactions as f64) / (tpcc.ramp_up as f64),
         "Result during Ramp up"
     );
-    let total_new_orders = TOTAL_NEW_ORDERS.load(Ordering::SeqCst);
-    let total_transactions = TOTAL_TRANSACTIONS.load(Ordering::SeqCst);
+    let total_new_orders = TOTAL_NEW_ORDERS.load(Ordering::SeqCst) - total_new_orders;
+    let total_transactions = TOTAL_TRANSACTIONS.load(Ordering::SeqCst) - total_transactions;
     info!(
         total_new_orders,
         total_transactions,
