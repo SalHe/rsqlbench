@@ -9,7 +9,7 @@ use anyhow::{anyhow, Context};
 use case_style::CaseStyle;
 use clap::{Parser, Subcommand, ValueEnum};
 use config::{Config, Environment, File};
-use rsqlbench::{
+use rsqlbench_core::{
     cfg::{
         self,
         tpcc::{TpccBenchmark, TpccTransaction},

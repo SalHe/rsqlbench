@@ -1,0 +1,27 @@
+[package]
+name = "rsqlbench-core"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+anyhow = { workspace = true }
+async-channel = { workspace = true }
+async-trait = "0.1.80"
+config = { workspace = true }
+rand = "0.8.5"
+serde = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+sqlx = { version = "0.7", features = [
+    "mysql",
+    # "postgres",
+    "runtime-tokio",
+    "time",
+    "tls-rustls",
+] }
+time = { workspace = true, features = ["macros"] }
+const_format = "0.2.32"
+static_assertions = "1.1.0"
+thiserror = "1.0.62"
+once_cell = "1.19.0"

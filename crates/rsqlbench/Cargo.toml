@@ -1,0 +1,21 @@
+[package]
+name = "rsqlbench"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+rsqlbench-core = { path = "../rsqlbench-core" }
+clap = { version = "4.5.9", features = ["derive"] }
+tracing = { workspace = true }
+tracing-subscriber = { version = "0.3", features = [
+    "env-filter",
+    "local-time",
+    "time",
+] }
+case_style = "0.2.1"
+config = { workspace = true }
+anyhow = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+time = { workspace = true }
+async-channel = { workspace = true }
