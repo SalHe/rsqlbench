@@ -15,6 +15,9 @@ use std::time::Duration;
 
 use crate::cfg::tpcc::TpccTransaction;
 
+pub const DATE_FORMAT: &[time::format_description::FormatItem] =
+    time::macros::format_description!("[day]-[month]-[year] [hour]:[minute]:[second]");
+
 #[derive(Debug)]
 pub enum Transaction {
     NewOrder(NewOrder),
@@ -72,5 +75,47 @@ impl Transaction {
             Transaction::Delivery(_) => Duration::from_secs(5),
             Transaction::StockLevel(_) => Duration::from_secs(5),
         }
+    }
+}
+
+#[cfg(test)]
+pub mod test {
+    use std::fmt::Display;
+
+    use crate::tpcc::sut::{TERMINAL_HEIGHT, TERMINAL_WIDTH};
+
+    pub fn terminal_display(d: impl Display) {
+        let output = format!("{d}");
+        let mut to_display = String::with_capacity((TERMINAL_WIDTH + 6) * (TERMINAL_HEIGHT + 5));
+        to_display.push_str(
+            r#"
+              1         2         3         4         5         6         7         8
+     12345678901234567890123456789012345678901234567890123456789012345678901234567890
+     --------------------------------------------------------------------------------
+"#,
+        );
+        let lines = output.split('\n').collect::<Vec<_>>();
+        for (line_no, line) in lines.iter().enumerate() {
+            to_display.push_str(&format!(
+                "  {l:02}|{line}|{problem}\n",
+                l = line_no + 1,
+                problem = if line_no >= TERMINAL_HEIGHT {
+                    "  <-------- exceeded line"
+                } else if line.len() == TERMINAL_WIDTH {
+                    ""
+                } else {
+                    "  <-------- line width not match"
+                }
+            ));
+        }
+        to_display.push_str(
+            "     --------------------------------------------------------------------------------",
+        );
+
+        // strict
+        assert!(
+            lines.len() == TERMINAL_HEIGHT && lines.iter().all(|x| x.len() == TERMINAL_WIDTH),
+            "{to_display}",
+        );
     }
 }

@@ -119,15 +119,19 @@ async fn tpcc_benchmark(
                 }
             }
             Transaction::Payment(input) => {
+                trace!(%input);
                 terminal.payment(input).await?;
             }
             Transaction::OrderStatus(input) => {
+                trace!(%input);
                 terminal.order_status(input).await?;
             }
             Transaction::Delivery(input) => {
+                trace!(%input);
                 terminal.delivery(input).await?;
             }
             Transaction::StockLevel(input) => {
+                trace!(%input);
                 terminal.stock_level(input).await?;
             }
         }

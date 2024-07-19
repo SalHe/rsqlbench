@@ -1,9 +1,46 @@
+//! Display:
+//!
+//!              1         2         3         4         5         6         7         8  
+//!     12345678901234567890123456789012345678901234567890123456789012345678901234567890
+//!     --------------------------------------------------------------------------------
+//!  01|                                     Payment                                    |
+//!  02|Date: DD-MM-YYYY hh:mm:ss                                                       |
+//!  03|                                                                                |
+//!  04|Warehouse: 9999                          District: 99                           |
+//!  05|XXXXXXXXXXXXXXXXXXXX                     XXXXXXXXXXXXXXXXXXXX                   |
+//!  06|XXXXXXXXXXXXXXXXXXXX                     XXXXXXXXXXXXXXXXXXXX                   |
+//!  07|XXXXXXXXXXXXXXXXXXXX XX XXXXX-XXXX       XXXXXXXXXXXXXXXXXXXX XX XXXXX-XXXX     |
+//!  08|                                                                                |
+//!  09|Customer: 9999  Cust-Warehouse: 9999  Cust-District: 99                         |
+//!  10|Name:   XXXXXXXXXXXXXXXX XX XXXXXXXXXXXXXXXX     Since:  DD-MM-YYYY             |
+//!  11|        XXXXXXXXXXXXXXXXXXXX                     Credit: XX                     |
+//!  12|        XXXXXXXXXXXXXXXXXXXX                     %Disc:  99.99                  |
+//!  13|        XXXXXXXXXXXXXXXXXXXX XX XXXXX-XXXX       Phone:  XXXXXX-XXX-XXX-XXXX    |
+//!  14|                                                                                |
+//!  15|Amount Paid:          $9999.99      New Cust-Balance: $-9999999999.99           |
+//!  16|Credit Limit:   $9999999999.99                                                  |
+//!  17|                                                                                |
+//!  18|Cust-Data: XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX                   |
+//!  19|           XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX                   |
+//!  20|           XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX                   |
+//!  21|           XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX                   |
+//!  22|                                                                                |
+//!  23|                                                                                |
+//!  24|                                                                                |
+//!     --------------------------------------------------------------------------------
+//!
+
+use std::fmt::Display;
+
 use rand::{thread_rng, Rng};
+use time::OffsetDateTime;
 
 use crate::tpcc::{
     model::DISTRICT_PER_WAREHOUSE,
     random::{rand_double, rand_last_name, NURAND_CUSTOMER_ID},
 };
+
+use super::DATE_FORMAT;
 
 #[derive(Debug)]
 pub struct Payment {
@@ -49,6 +86,51 @@ impl Payment {
     }
 }
 
+impl Display for Payment {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let now = OffsetDateTime::now_utc().format(DATE_FORMAT).unwrap();
+        let Self {
+            warehouse_id: w,
+            district_id: d,
+            customer,
+            amount: a,
+            preferred_warehouse_id: pw,
+        } = self;
+        let (c_, c_last_____) = match customer {
+            CustomerSelector::LastName(l) => (String::from("----"), l.as_str()),
+            CustomerSelector::ID(c) => (format!("{c:<4}"), ""),
+        };
+        write!(
+            f,
+            r#"                                     Payment                                    
+Date: {now}                                                       
+                                                                                
+Warehouse: {w:<6}                        District: {d:<2}                           
+XXXXXXXXXXXXXXXXXXXX                     XXXXXXXXXXXXXXXXXXXX                   
+XXXXXXXXXXXXXXXXXXXX                     XXXXXXXXXXXXXXXXXXXX                   
+XXXXXXXXXXXXXXXXXXXX XX XXXXX-XXXX       XXXXXXXXXXXXXXXXXXXX XX XXXXX-XXXX     
+                                                                                
+Customer: {c_}  Cust-Warehouse: {pw:<4}  Cust-District: {d:<2}                         
+Name:   {c_last_____:16} XX XXXXXXXXXXXXXXXX     Since:  **-**-****             
+        XXXXXXXXXXXXXXXXXXXX                     Credit: XX                     
+        XXXXXXXXXXXXXXXXXXXX                     %Disc:  --.--                  
+        XXXXXXXXXXXXXXXXXXXX XX XXXXX-XXXX       Phone:  XXXXXX-XXX-XXX-XXXX    
+                                                                                
+Amount Paid:          ${a:4.2}      New Cust-Balance: $-**********.**           
+Credit Limit:   $----------.--                                                  
+                                                                                
+Cust-Data: XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX                   
+           XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX                   
+           XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX                   
+           XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX                   
+                                                                                
+                                                                                
+                                                                                "#
+        )?;
+        Ok(())
+    }
+}
+
 #[derive(Debug)]
 pub enum CustomerSelector {
     LastName(String),
@@ -62,5 +144,15 @@ impl CustomerSelector {
         } else {
             CustomerSelector::ID(NURAND_CUSTOMER_ID.next() as _)
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::tpcc::transaction::{test::terminal_display, Payment};
+
+    #[test]
+    fn display() {
+        terminal_display(Payment::generate(29, 30, 29));
     }
 }

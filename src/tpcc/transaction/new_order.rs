@@ -41,6 +41,8 @@ use crate::tpcc::{
     random::{NURAND_CUSTOMER_ID, NURAND_ITEM_ID},
 };
 
+use super::DATE_FORMAT;
+
 #[derive(Debug)]
 pub struct NewOrder {
     pub warehouse_id: u32,
@@ -85,7 +87,7 @@ impl NewOrder {
 
 impl Display for NewOrder {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let now = OffsetDateTime::now_utc();
+        let now = OffsetDateTime::now_utc().format(DATE_FORMAT).unwrap();
         let Self {
             warehouse_id: w,
             district_id: d,
@@ -96,12 +98,12 @@ impl Display for NewOrder {
         #[rustfmt::skip]
         write!(
             f,
-r#"                                   New Order
-Warehouse: {w:<6} District: {d:<2}                        Date: {now}
-Customer:  {c:<6} Name: ----------------   Credit: --   %Disc: --.--
-Order Number: --------  Number of Lines: --        W_tax: --.--   D_tax: --.--
-
- Supp_W  Item_Id  Item Name                 Qty  Stock  B/G  Price    Amount
+r#"                                   New Order                                    
+Warehouse: {w:<6} District: {d:<2}                        Date: {now} 
+Customer:  {c:<6} Name: ----------------   Credit: --   %Disc: --.--            
+Order Number: --------  Number of Lines: --        W_tax: --.--   D_tax: --.--  
+                                                                                
+ Supp_W  Item_Id  Item Name                 Qty  Stock  B/G  Price    Amount    
 "#)?;
         for i in order_lines {
             writeln!(f, "{i}")?;
@@ -113,12 +115,11 @@ Order Number: --------  Number of Lines: --        W_tax: --.--   D_tax: --.--
             )?;
         }
         #[rustfmt::skip]
-        writeln!(
+        write!(
             f,
-r#"Execution Status: ------------------------                   Total:  $-----.--
-
-
-"#
+r#"Execution Status: ------------------------                   Total:  $-----.--  
+                                                                                
+                                                                                "#
         )?;
         Ok(())
     }
@@ -154,10 +155,12 @@ impl NewOrderLine {
 
 #[cfg(test)]
 mod test {
+    use crate::tpcc::transaction::test::terminal_display;
+
     use super::NewOrder;
 
     #[test]
-    fn display_new_order() {
-        println!("{no}", no = NewOrder::generate(1, 2));
+    fn display() {
+        terminal_display(NewOrder::generate(1, 2));
     }
 }
