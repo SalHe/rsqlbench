@@ -2,11 +2,25 @@ use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 pub struct TpccBenchmark {
+    /// Simulating keying and thinking time. Disable this feature for more parallelism with less terminals.
     #[serde(default)]
     pub keying_and_thinking: bool,
+
+    /// Ramp up duration(minutes).
     pub ramp_up: usize,
+
+    /// Benchmark duration(minutes).
+    ///
+    /// Benchmark will finish after specified minutes.
     pub baking: usize,
+
+    /// Terminals to simulate.
     pub terminals: usize,
+
+    /// TPC-C transactions' weight.
+    ///
+    /// Unnecessary to specify weight of new order which will be determined by other weights
+    /// with assuming that all weights sum to 100.0%.
     pub transactions: TpccTransaction,
 }
 

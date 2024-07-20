@@ -1,0 +1,21 @@
+[package]
+name = "rsqlbench-yasdb"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+rsqlbench-core = { path = "../rsqlbench-core" }
+time = { workspace = true }
+async-trait = { workspace = true }
+async-channel = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+# not ready not this
+# yasqlplus-client = { git = "https://github.com/SalHe/yasqlplus.git", version = "0.1.2" }
+
+[build-dependencies]
+bindgen = "0.69.1"

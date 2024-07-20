@@ -10,6 +10,8 @@ use rsqlbench_core::{
     cfg::{BenchConfig, Connection},
     tpcc::sut::{MysqlSut, Sut},
 };
+#[cfg(feature = "yasdb")]
+use rsqlbench_yasdb::YasdbSut;
 use time::{format_description::well_known::Rfc3339, UtcOffset};
 use tracing::{info, level_filters::LevelFilter, warn};
 use tracing_subscriber::{fmt::time::OffsetTime, EnvFilter};
@@ -123,6 +125,10 @@ async fn main() -> anyhow::Result<()> {
     info!(sut_type);
     let sut: Rc<Box<dyn Sut>> = match sut_type.as_str() {
         "mysql" => Rc::new(Box::new(MysqlSut::new(cfg.connection))),
+        #[cfg(feature = "yasdb")]
+        "yasdb" => Rc::new(Box::new(YasdbSut::new(cfg.connection))),
+        #[cfg(not(feature = "yasdb"))]
+        "yasdb" => return Err(anyhow!("Unsupported sut/db.")),
         _ => return Err(anyhow!("Unsupported sut/db.")),
     };
 

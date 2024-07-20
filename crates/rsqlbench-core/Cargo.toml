@@ -7,7 +7,7 @@ license = "MIT"
 [dependencies]
 anyhow = { workspace = true }
 async-channel = { workspace = true }
-async-trait = "0.1.80"
+async-trait = { workspace = true }
 config = { workspace = true }
 rand = "0.8.5"
 serde = { workspace = true }

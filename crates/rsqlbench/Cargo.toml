@@ -6,6 +6,7 @@ license = "MIT"
 
 [dependencies]
 rsqlbench-core = { path = "../rsqlbench-core" }
+rsqlbench-yasdb = { path = "../rsqlbench-yasdb", optional = true }
 clap = { version = "4.5.9", features = ["derive"] }
 tracing = { workspace = true }
 tracing-subscriber = { version = "0.3", features = [
@@ -21,3 +22,6 @@ time = { workspace = true }
 async-channel = { workspace = true }
 url = "2.5.2"
 thiserror = { workspace = true }
+
+[features]
+yasdb = ["rsqlbench-yasdb"]
