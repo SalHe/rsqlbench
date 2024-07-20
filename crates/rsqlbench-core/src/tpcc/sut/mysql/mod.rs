@@ -1,38 +1,24 @@
 mod loader;
 mod terminal;
 
-use crate::cfg::Connection;
+use crate::cfg::Connection as ConnectionCfg;
 use crate::tpcc::loader::Loader;
 use async_trait::async_trait;
 use loader::MysqlLoader;
-use sqlx::mysql::MySqlConnectOptions;
 
-use sqlx::{ConnectOptions, Executor, MySqlConnection};
+use sqlx::{Connection, Executor, MySqlConnection};
 use terminal::MysqlTerminal;
 use tracing::{info, instrument};
 
 use super::{Sut, Terminal};
 
 pub struct MysqlSut {
-    connection: Connection,
+    connection: ConnectionCfg,
 }
 
 impl MysqlSut {
-    pub fn new(connection: Connection) -> Self {
+    pub fn new(connection: ConnectionCfg) -> Self {
         Self { connection }
-    }
-
-    fn build_options_for_schema(&self) -> MySqlConnectOptions {
-        let mut mysql = MySqlConnectOptions::new()
-            .username(&self.connection.schema_user.username)
-            .password(&self.connection.schema_user.password)
-            .database(&self.connection.database)
-            .host(&self.connection.host)
-            .disable_statement_logging();
-        if let Some(p) = self.connection.port {
-            mysql = mysql.port(p);
-        }
-        mysql
     }
 
     #[instrument(skip(self))]
@@ -569,13 +555,19 @@ END
 impl Sut for MysqlSut {
     async fn terminal(&self, _id: u32) -> anyhow::Result<Box<dyn Terminal>> {
         Ok(Box::new(MysqlTerminal::new(
-            self.build_options_for_schema().connect().await?,
+            MySqlConnection::connect(&self.connection.connections.benchmark).await?,
         )))
     }
 
     #[instrument(skip(self))]
     async fn build_schema(&self) -> anyhow::Result<()> {
-        let mut conn = self.build_options_for_schema().connect().await?;
+        info!("Connecting database...");
+        let mut conn = MySqlConnection::connect(&self.connection.connections.schema).await?;
+        info!("Creating database...");
+        sqlx::query(&format!("create database {}", self.connection.database))
+            .execute(&mut conn)
+            .await?;
+        info!("Creating tables...");
         #[rustfmt::skip]
         let sql_set = [
 "SET FOREIGN_KEY_CHECKS = 0",
@@ -716,47 +708,42 @@ CREATE TABLE `stock` (
 PRIMARY KEY (`s_w_id`,`s_i_id`)
 )"#,
 ];
+        let mut conn = MySqlConnection::connect(&format!(
+            "{}/{}",
+            self.connection.connections.schema, self.connection.database
+        ))
+        .await?; // TODO how to `use database` in SQLx?
         for sql in sql_set {
+            info!(ddl = sql, "Creating table...");
             conn.execute(sql).await?;
         }
+        info!("Tables created.");
         Ok(())
     }
 
     async fn after_loaded(&self) -> anyhow::Result<()> {
-        let mut conn = self.build_options_for_schema().connect().await?;
+        let mut conn = MySqlConnection::connect(&format!(
+            "{}/{}",
+            self.connection.connections.schema, self.connection.database
+        ))
+        .await?;
         self.create_stored_proc(&mut conn).await?;
         Ok(())
     }
 
     async fn destroy_schema(&self) -> anyhow::Result<()> {
-        let mut conn = self.build_options_for_schema().connect().await?;
-        // Drop order must be promised due to FOREIGN_KEY_CHECKS.
-        for table in [
-            "new_order",
-            "order_line",
-            "oorder",
-            "history",
-            "customer",
-            "stock",
-            "item",
-            "district",
-            "warehouse",
-        ] {
-            info!("Dropping table {table}...");
-            let sql = format!("drop table `{table}`;");
-            let _ = conn.execute(sql.as_str()).await;
-        }
-        for proc in ["delivery", "neword", "ostat", "payment", "slev"] {
-            info!("Dropping procedure {proc}...");
-            let sql = format!("drop procedure `{proc}`;");
-            let _ = conn.execute(sql.as_str()).await;
-        }
+        let mut conn = MySqlConnection::connect(&self.connection.connections.schema).await?;
+        info!("Dropping database...");
+        sqlx::query(&format!("drop database {}", self.connection.database))
+            .execute(&mut conn)
+            .await?;
+        info!("Database dropped.");
         Ok(())
     }
 
     async fn loader(&self) -> anyhow::Result<Box<dyn Loader>> {
         Ok(Box::new(MysqlLoader::new(
-            self.build_options_for_schema().connect().await?,
+            MySqlConnection::connect(&self.connection.connections.loader).await?,
         )))
     }
 }

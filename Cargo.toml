@@ -10,6 +10,7 @@ serde = { version = "1.0.203", features = ["derive"] }
 config = "0.14.0"
 anyhow = { version = "1.0.86", features = ["backtrace"] }
 async-channel = "2.3.1"
+thiserror = "1.0.62"
 
 [profile.release]
 opt-level = 'z'

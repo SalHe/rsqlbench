@@ -1509,10 +1509,12 @@ dependencies = [
  "clap",
  "config",
  "rsqlbench-core",
+ "thiserror",
  "time",
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "url",
 ]
 
 [[package]]

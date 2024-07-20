@@ -3,21 +3,17 @@ mod loader;
 
 use std::rc::Rc;
 
-use anyhow::Context;
-use clap::{Parser, Subcommand, ValueEnum};
+use anyhow::{anyhow, Context};
+use clap::{Parser, Subcommand};
 use config::{Config, Environment, File};
 use rsqlbench_core::{
-    cfg::BenchConfig,
+    cfg::{BenchConfig, Connection},
     tpcc::sut::{MysqlSut, Sut},
 };
 use time::{format_description::well_known::Rfc3339, UtcOffset};
-use tracing::{info, level_filters::LevelFilter};
+use tracing::{info, level_filters::LevelFilter, warn};
 use tracing_subscriber::{fmt::time::OffsetTime, EnvFilter};
-
-#[derive(Debug, Clone, ValueEnum)]
-enum Database {
-    Mysql,
-}
+use url::Url;
 
 #[derive(Debug, Parser)]
 #[command(author, version, about, long_about=None)]
@@ -25,10 +21,6 @@ struct Cli {
     /// Configuration file.
     #[arg(short, long, default_value = "rsqlbench.yaml")]
     config: String,
-
-    /// System under test, SUT.
-    #[arg(long, value_enum)]
-    db: Database,
 
     #[command(subcommand)]
     command: Command,
@@ -50,6 +42,55 @@ enum TpccCommand {
 
     /// Destroy schema.
     Destroy,
+}
+
+#[derive(Debug, thiserror::Error)]
+enum DbVerifyError {
+    #[error("Some db connection strings are wrong: {0:?}")]
+    UrlError(Vec<url::ParseError>),
+
+    #[error("Used different SUT or RDBMS in connection string list")]
+    DifferentSut,
+}
+
+fn check_same_db_type(connection: &Connection) -> Result<String, DbVerifyError> {
+    let parsed = [
+        &connection.connections.schema,
+        &connection.connections.loader,
+        &connection.connections.benchmark,
+    ]
+    .iter()
+    .map(|url| Url::parse(url))
+    .collect::<Vec<_>>();
+
+    if parsed.iter().any(|x| x.is_ok()) && parsed.iter().any(|x| x.is_err()) {
+        Err(DbVerifyError::UrlError(
+            parsed
+                .into_iter()
+                .filter(|x| x.is_err())
+                .map(|x| x.unwrap_err())
+                .collect::<Vec<_>>(),
+        ))
+    } else if parsed.iter().all(Result::is_err) {
+        warn!("Could not determine db type according to db connection string");
+
+        let sut = connection.sut.clone().expect("SUT must be specified");
+        warn!("Fallback SUT/db type to {}", sut);
+        Ok(sut)
+    } else {
+        let rdbms = parsed
+            .first()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .scheme()
+            .to_string();
+        if parsed.iter().all(|x| x.as_ref().unwrap().scheme() == rdbms) {
+            Ok(rdbms.to_string())
+        } else {
+            Err(DbVerifyError::DifferentSut)
+        }
+    }
 }
 
 #[tokio::main]
@@ -77,8 +118,12 @@ async fn main() -> anyhow::Result<()> {
 
     info!(?cfg, "Using config");
 
-    let sut: Rc<Box<dyn Sut>> = match cli.db {
-        Database::Mysql => Rc::new(Box::new(MysqlSut::new(cfg.connection))),
+    let sut_type = check_same_db_type(&cfg.connection)?;
+
+    info!(sut_type);
+    let sut: Rc<Box<dyn Sut>> = match sut_type.as_str() {
+        "mysql" => Rc::new(Box::new(MysqlSut::new(cfg.connection))),
+        _ => return Err(anyhow!("Unsupported sut/db.")),
     };
 
     match cli.command {
