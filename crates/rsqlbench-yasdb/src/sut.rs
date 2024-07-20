@@ -90,6 +90,26 @@ impl Sut for YasdbSut {
         let conn = self
             .connect(self.connection.connections.schema.to_string())
             .await?;
+        let mut exec = SimpleExecutor::new(StatementHandle::new(&conn.conn_handle)?);
+
+        // Build indexes
+        let sql_set = [
+            "CREATE UNIQUE INDEX CUSTOMER_I1 ON CUSTOMER (C_W_ID, C_D_ID, C_ID)",
+            "CREATE UNIQUE INDEX CUSTOMER_I2 ON CUSTOMER (C_LAST, C_D_ID, C_W_ID, C_FIRST)",
+            "CREATE UNIQUE INDEX DISTRICT_I1 ON DISTRICT (D_W_ID, D_ID)",
+            "CREATE UNIQUE INDEX ITEM_I1 ON ITEM (I_ID)",
+            "CREATE UNIQUE INDEX OORDER_I1 ON OORDER (O_W_ID, O_D_ID, O_ID)",
+            "CREATE UNIQUE INDEX OORDER_I2 ON OORDER (O_W_ID, O_D_ID, O_C_ID, O_ID)",
+            "CREATE UNIQUE INDEX STOCK_I1 ON STOCK (S_I_ID, S_W_ID)",
+            "CREATE UNIQUE INDEX WAREHOUSE_I1 ON WAREHOUSE (W_ID)",
+        ];
+        info!("Building indexes...");
+        for sql in sql_set {
+            exec.execute(sql).await?;
+        }
+        info!("Indexes created.");
+
+        // Create procedures
         let sql_set = [
             r"CREATE OR REPLACE PROCEDURE NEWORD (
             no_w_id		BINARY_INTEGER,
@@ -156,7 +176,7 @@ impl Sut for YasdbSut {
 
             UPDATE district SET d_next_o_id = d_next_o_id + 1 WHERE d_id = no_d_id AND d_w_id = no_w_id RETURNING d_next_o_id - 1, d_tax INTO no_d_next_o_id, no_d_tax;
 
-            INSERT INTO ORDERS (o_id, o_d_id, o_w_id, o_c_id, o_entry_d, o_ol_cnt, o_all_local) VALUES (no_d_next_o_id, no_d_id, no_w_id, no_c_id, timestamp, no_o_ol_cnt, no_o_all_local);
+            INSERT INTO OORDER (o_id, o_d_id, o_w_id, o_c_id, o_entry_d, o_ol_cnt, o_all_local) VALUES (no_d_next_o_id, no_d_id, no_w_id, no_c_id, timestamp, no_o_ol_cnt, no_o_all_local);
             INSERT INTO NEW_ORDER (no_o_id, no_d_id, no_w_id) VALUES (no_d_next_o_id, no_d_id, no_w_id);
 
             -- The HammerDB implementation doesn't do the check for ORIGINAL (which should be done against i_data and s_data)
@@ -443,7 +463,7 @@ impl Sut for YasdbSut {
             ordcnt := SQL%ROWCOUNT;
 
             FORALL o in 1.. ordcnt
-            UPDATE orders
+            UPDATE OORDER
             SET o_carrier_id = d_o_carrier_id
             WHERE o_id = o_id_array (o)
             AND o_d_id = dist_id_array(o)
@@ -558,7 +578,7 @@ impl Sut for YasdbSut {
         SELECT o_id, o_carrier_id, o_entry_d
         INTO os_o_id, os_o_carrier_id, os_entdate
         FROM (SELECT o_id, o_carrier_id, o_entry_d
-        FROM orders
+        FROM OORDER
         WHERE o_d_id = os_d_id AND o_w_id = os_w_id and o_c_id=os_c_id
         ORDER BY o_id DESC)
         WHERE ROWNUM = 1;
@@ -615,12 +635,12 @@ impl Sut for YasdbSut {
         ROLLBACK;
     END",
         ];
-        let mut exec = SimpleExecutor::new(StatementHandle::new(&conn.conn_handle)?);
         info!("Creating procedures...");
         for sql in sql_set {
             exec.execute(sql).await?;
         }
         info!("Procedures created.");
+
         Ok(())
     }
 

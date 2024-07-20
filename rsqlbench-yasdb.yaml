@@ -1,6 +1,6 @@
 loader:
   monkeys: 20
-  warehouse: 500
+  warehouse: 20
 connection:
   sut: yasdb
   database: rsqlbench
@@ -17,7 +17,6 @@ benchmark:
     ramp_up: 5
     baking: 10
     terminals: 450
-    # terminals: 1
     transactions:
       payment: 43
       order_status: 4

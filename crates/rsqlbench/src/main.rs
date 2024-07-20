@@ -128,7 +128,7 @@ async fn main() -> anyhow::Result<()> {
         #[cfg(feature = "yasdb")]
         "yasdb" => Rc::new(Box::new(YasdbSut::new(cfg.connection))),
         #[cfg(not(feature = "yasdb"))]
-        "yasdb" => return Err(anyhow!("Unsupported sut/db.")),
+        "yasdb" => return Err(anyhow!("yasdb not implement in current rsqlbench distribution, please compile rsqlbench with feature `yasdb`.")),
         _ => return Err(anyhow!("Unsupported sut/db.")),
     };
 
