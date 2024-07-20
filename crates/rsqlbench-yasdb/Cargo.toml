@@ -14,7 +14,7 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 
-# not ready not this
+# not ready for this
 # yasqlplus-client = { git = "https://github.com/SalHe/yasqlplus.git", version = "0.1.2" }
 
 [build-dependencies]

@@ -38,6 +38,10 @@ jobs:
           profile: minimal
           toolchain: stable
           override: true
+      - name: Download yasdb client
+        run: ./scripts/download-yascli.sh
+      - name: Setup environment variables
+        run: ./scripts/ci-env.sh
       - name: Build
         run: cargo build --all-features --tests --benches
       - name: Run tests
@@ -71,6 +75,8 @@ jobs:
           toolchain: stable
           override: true
           components: clippy, rustfmt
+      - name: Download yasdb client
+        run: ./scripts/download-yascli.sh
       - name: Run rustfmt
         uses: actions-rs/cargo@v1
         with:
