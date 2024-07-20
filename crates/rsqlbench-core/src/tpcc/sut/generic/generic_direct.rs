@@ -2,6 +2,7 @@
 
 use std::future::Future;
 
+use sqlx::{database::HasArguments, Database, IntoArguments};
 use tracing::info;
 
 use crate::tpcc::model::{
@@ -12,12 +13,44 @@ use crate::tpcc::model::{
 };
 
 pub trait Executor {
-    fn execute(&self, sql: &str) -> impl Future<Output = anyhow::Result<()>> + Send;
+    fn execute(&mut self, sql: &str) -> impl Future<Output = anyhow::Result<()>> + Send;
+}
+
+pub struct SqlxExecutorWrapper<'e, DB, E>
+where
+    DB: Database,
+    for<'a> &'a mut E: sqlx::Executor<'a, Database = DB>,
+    for<'a> <DB as HasArguments<'a>>::Arguments: IntoArguments<'a, DB>,
+{
+    executor: &'e mut E,
+}
+
+impl<'e, DB, E> SqlxExecutorWrapper<'e, DB, E>
+where
+    DB: Database,
+    for<'a> &'a mut E: sqlx::Executor<'a, Database = DB>,
+    for<'a> <DB as HasArguments<'a>>::Arguments: IntoArguments<'a, DB>,
+{
+    pub fn new(executor: &'e mut E) -> Self {
+        Self { executor }
+    }
+}
+
+impl<'e, DB, E> Executor for SqlxExecutorWrapper<'e, DB, E>
+where
+    DB: Database,
+    for<'a> &'a mut E: sqlx::Executor<'a, Database = DB>,
+    for<'a> <DB as HasArguments<'a>>::Arguments: IntoArguments<'a, DB>,
+{
+    async fn execute(&mut self, sql: &str) -> anyhow::Result<()> {
+        sqlx::query(sql).execute(&mut *self.executor).await?;
+        Ok(())
+    }
 }
 
 pub async fn load_stocks(
     warehouse: &Warehouse,
-    executor: &impl Executor,
+    executor: &mut impl Executor,
     batch_size: usize,
 ) -> anyhow::Result<()> {
     info!(
@@ -49,7 +82,10 @@ pub async fn load_stocks(
     Ok(())
 }
 
-pub async fn load_warehouse(warehouse: &Warehouse, executor: &impl Executor) -> anyhow::Result<()> {
+pub async fn load_warehouse(
+    warehouse: &Warehouse,
+    executor: &mut impl Executor,
+) -> anyhow::Result<()> {
     let Warehouse {
         id,
         name,
@@ -67,7 +103,7 @@ pub async fn load_warehouse(warehouse: &Warehouse, executor: &impl Executor) -> 
     Ok(())
 }
 
-async fn load_districts(warehouse: &Warehouse, executor: &impl Executor) -> anyhow::Result<()> {
+async fn load_districts(warehouse: &Warehouse, executor: &mut impl Executor) -> anyhow::Result<()> {
     let batch_size: usize = 10;
     info!(
         "Loading districts for warehouse ID={id} (batch size={batch_size})",
@@ -104,7 +140,7 @@ async fn load_districts(warehouse: &Warehouse, executor: &impl Executor) -> anyh
 
 async fn load_customers(
     district: &District,
-    executor: &impl Executor,
+    executor: &mut impl Executor,
     batch_size: usize,
 ) -> anyhow::Result<()> {
     info!(
@@ -168,7 +204,7 @@ async fn load_customers(
 
 async fn load_orders(
     district: &District,
-    executor: &impl Executor,
+    executor: &mut impl Executor,
     batch_size: usize,
 ) -> anyhow::Result<()> {
     info!(
@@ -242,7 +278,7 @@ async fn load_orders(
 pub async fn load_items(
     generator: ItemGenerator,
     batch_size: usize,
-    executor: &impl Executor,
+    executor: &mut impl Executor,
 ) -> anyhow::Result<()> {
     info!("Loading items (batch size={batch_size})");
     const SQL_PREFIX: &str = "INSERT INTO item (i_id, i_im_id, i_name, i_price, i_data) VALUES";

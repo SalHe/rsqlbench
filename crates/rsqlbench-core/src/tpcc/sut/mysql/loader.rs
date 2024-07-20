@@ -5,7 +5,7 @@ use tracing::{info, instrument};
 use crate::tpcc::{
     loader::Loader,
     model::{ItemGenerator, Warehouse},
-    sut::direct,
+    sut::generic_direct::{self, SqlxExecutorWrapper},
 };
 
 pub struct MysqlLoader {
@@ -24,7 +24,14 @@ impl Loader for MysqlLoader {
     async fn load_items(&mut self, generator: ItemGenerator) -> anyhow::Result<()> {
         self.conn
             .transaction(|txn| {
-                Box::pin(async move { direct::load_items(generator, &mut **txn, 50000).await })
+                Box::pin(async move {
+                    generic_direct::load_items(
+                        generator,
+                        50000,
+                        &mut SqlxExecutorWrapper::new(&mut **txn),
+                    )
+                    .await
+                })
             })
             .await?;
         Ok(())
@@ -42,7 +49,13 @@ impl Loader for MysqlLoader {
             info!("Loading warehouse ID={id}", id = warehouse.id);
             self.conn
                 .transaction(|txn| {
-                    Box::pin(async move { direct::load_warehouse(&warehouse, &mut **txn).await })
+                    Box::pin(async move {
+                        generic_direct::load_warehouse(
+                            &warehouse,
+                            &mut SqlxExecutorWrapper::new(&mut **txn),
+                        )
+                        .await
+                    })
                 })
                 .await?;
         }

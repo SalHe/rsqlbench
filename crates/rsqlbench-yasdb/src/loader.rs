@@ -27,7 +27,8 @@ impl YasdbLoader {
 impl Loader for YasdbLoader {
     async fn load_items(&mut self, generator: ItemGenerator) -> anyhow::Result<()> {
         let stmt = StatementHandle::new(&self.conn.conn_handle)?;
-        tpcc::sut::all::load_items(generator, 5000, &SimpleExecutor::new(stmt)).await?;
+        tpcc::sut::generic_direct::load_items(generator, 5000, &mut SimpleExecutor::new(stmt))
+            .await?;
         Ok(())
     }
 
@@ -36,10 +37,10 @@ impl Loader for YasdbLoader {
         generator: async_channel::Receiver<Warehouse>,
     ) -> anyhow::Result<()> {
         sleep(Duration::from_secs(1)).await;
-        let stmt = SimpleExecutor::new(StatementHandle::new(&self.conn.conn_handle)?);
+        let mut stmt = SimpleExecutor::new(StatementHandle::new(&self.conn.conn_handle)?);
         while let Ok(warehouse) = generator.recv().await {
             info!("Loading warehouse ID={id}", id = warehouse.id);
-            tpcc::sut::all::load_warehouse(&warehouse, &stmt).await?;
+            tpcc::sut::generic_direct::load_warehouse(&warehouse, &mut stmt).await?;
         }
         Ok(())
     }

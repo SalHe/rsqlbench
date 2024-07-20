@@ -1,4 +1,4 @@
-use rsqlbench_core::tpcc::sut::all::Executor;
+use rsqlbench_core::tpcc::sut::generic_direct::Executor;
 use tokio::task::spawn_blocking;
 
 use crate::native::{yacDirectExecute, EnYacResult_YAC_ERROR};
@@ -16,7 +16,7 @@ impl SimpleExecutor {
 }
 
 impl Executor for SimpleExecutor {
-    async fn execute(&self, sql: &str) -> anyhow::Result<()> {
+    async fn execute(&mut self, sql: &str) -> anyhow::Result<()> {
         let sql = sql.to_string();
         // TODO safety???
         let s = unsafe { &*(self as *const Self) };

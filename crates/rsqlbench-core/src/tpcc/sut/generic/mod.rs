@@ -1,3 +1,2 @@
-pub mod all;
-pub mod direct;
+pub mod generic_direct;
 pub mod prepared;

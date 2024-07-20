@@ -1,0 +1,25 @@
+loader:
+  monkeys: 20
+  warehouse: 500
+connection:
+  sut: yasdb
+  database: rsqlbench
+  connections:
+    schema: 127.0.0.1:1688
+    loader: 127.0.0.1:1688
+    benchmark: 127.0.0.1:1688
+    others:
+      username: sys
+      password: yashandb_123
+benchmark:
+  tpcc:
+    keying_and_thinking: false
+    ramp_up: 5
+    baking: 10
+    terminals: 450
+    # terminals: 1
+    transactions:
+      payment: 43
+      order_status: 4
+      delivery: 4
+      stock_level: 4
