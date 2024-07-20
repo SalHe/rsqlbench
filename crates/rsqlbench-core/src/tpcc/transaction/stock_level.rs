@@ -88,14 +88,71 @@ low stock: ---
     }
 }
 
+#[derive(Debug)]
+pub struct StockLevelOut {
+    pub warehouse_id: u32,
+    pub district_id: u8,
+    pub threshold: u8,
+    pub low_stock: u8,
+}
+
+impl Display for StockLevelOut {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let Self {
+            warehouse_id: w,
+            district_id: d,
+            threshold: t,
+            low_stock: l,
+        } = self;
+        write!(
+            f,
+            r#"                                  Stock-Level                                   
+Warehouse: {w:<6} District: {d:<2}                                                  
+                                                                                
+Stock Level Threshold: {t:<2}                                                       
+                                                                                
+low stock: {l:<3}                                                                  
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                "#
+        )?;
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod test {
     use crate::tpcc::transaction::test::terminal_display;
 
-    use super::StockLevel;
+    use super::{StockLevel, StockLevelOut};
 
     #[test]
     fn display() {
         terminal_display(StockLevel::generate(11, 2));
+    }
+
+    #[test]
+    fn display_out() {
+        terminal_display(StockLevelOut {
+            warehouse_id: 1,
+            district_id: 2,
+            threshold: 33,
+            low_stock: 44,
+        });
     }
 }

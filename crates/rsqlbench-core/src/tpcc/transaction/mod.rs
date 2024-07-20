@@ -11,12 +11,14 @@ pub use payment::*;
 use rand::{thread_rng, Rng};
 pub use stock_level::*;
 
-use std::time::Duration;
+use std::{fmt::Display, time::Duration};
 
 use crate::cfg::tpcc::TpccTransaction;
 
-pub const DATE_FORMAT: &[time::format_description::FormatItem] =
+pub const DATE_TIME_FORMAT: &[time::format_description::FormatItem] =
     time::macros::format_description!("[day]-[month]-[year] [hour]:[minute]:[second]");
+pub const ONLY_DATE_FORMAT: &[time::format_description::FormatItem] =
+    time::macros::format_description!("[day]-[month]-[year]");
 
 #[derive(Debug)]
 pub enum Transaction {
@@ -78,6 +80,58 @@ impl Transaction {
     }
 }
 
+pub(crate) struct ZipWrapper<'a>(&'a str);
+
+impl<'a> Display for ZipWrapper<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}-{}", &self.0[0..5], &self.0[5..])
+    }
+}
+
+pub(crate) struct PhoneWrapper<'a>(&'a str);
+
+impl<'a> Display for PhoneWrapper<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}-{}-{}-{}",
+            &self.0[0..6],
+            &self.0[6..9],
+            &self.0[9..12],
+            &self.0[12..]
+        )
+    }
+}
+
+pub(crate) struct OptionWrapper<'a, T: ?Sized, WF>(Option<&'a T>, WF);
+
+impl<'a, T: ?Sized, WF, W> Display for OptionWrapper<'a, T, WF>
+where
+    WF: Fn(&'a T) -> W,
+    W: Display,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.0 {
+            Some(v) => self.1(v).fmt(f),
+            None => "".fmt(f),
+        }
+    }
+}
+
+pub(crate) struct SimpleOptionWrapper<'a, T>(&'a Option<T>);
+
+impl<'a, T> Display for SimpleOptionWrapper<'a, T>
+where
+    T: Display,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.0 {
+            Some(v) => v.fmt(f),
+            None => "".fmt(f),
+        }
+    }
+}
+
 #[cfg(test)]
 pub mod test {
     use std::fmt::Display;
@@ -112,6 +166,7 @@ pub mod test {
             "     --------------------------------------------------------------------------------",
         );
 
+        // println!("{to_display}");
         // strict
         assert!(
             lines.len() == TERMINAL_HEIGHT && lines.iter().all(|x| x.len() == TERMINAL_WIDTH),

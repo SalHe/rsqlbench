@@ -19,6 +19,7 @@ sqlx = { version = "0.7", features = [
     "runtime-tokio",
     "time",
     "tls-rustls",
+    "rust_decimal",
 ] }
 time = { workspace = true, features = ["macros"] }
 const_format = "0.2.32"

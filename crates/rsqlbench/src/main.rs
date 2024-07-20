@@ -113,26 +113,33 @@ async fn tpcc_benchmark(
         match &tx {
             Transaction::NewOrder(input) => {
                 trace!(%input);
-                terminal.new_order(input).await?;
+                match terminal.new_order(input).await? {
+                    Ok(out) => trace!(%out, "New order created"),
+                    Err(rb) => trace!(%rb, "Failed to create new order"),
+                }
                 if !input.rollback_last {
                     TOTAL_NEW_ORDERS.fetch_add(1, Ordering::SeqCst);
                 }
             }
             Transaction::Payment(input) => {
                 trace!(%input);
-                terminal.payment(input).await?;
+                let out = terminal.payment(input).await?;
+                trace!(%out, "Paid");
             }
             Transaction::OrderStatus(input) => {
                 trace!(%input);
-                terminal.order_status(input).await?;
+                let out = terminal.order_status(input).await?;
+                trace!(%out, "Query order status");
             }
             Transaction::Delivery(input) => {
                 trace!(%input);
-                terminal.delivery(input).await?;
+                let out = terminal.delivery(input).await?;
+                trace!(%out, "Delivery orders");
             }
             Transaction::StockLevel(input) => {
                 trace!(%input);
-                terminal.stock_level(input).await?;
+                let out = terminal.stock_level(input).await?;
+                trace!(%out, "Query stock level");
             }
         }
         TOTAL_TRANSACTIONS.fetch_add(1, Ordering::SeqCst);

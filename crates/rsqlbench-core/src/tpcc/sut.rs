@@ -7,7 +7,10 @@ pub use mysql::*;
 
 use super::{
     loader::Loader,
-    transaction::{Delivery, NewOrder, OrderStatus, Payment, StockLevel},
+    transaction::{
+        Delivery, DeliveryOut, NewOrder, NewOrderOut, NewOrderRollbackOut, OrderStatus,
+        OrderStatusOut, Payment, PaymentOut, StockLevel, StockLevelOut,
+    },
 };
 
 #[async_trait]
@@ -30,11 +33,14 @@ pub trait Sut {
 
 #[async_trait]
 pub trait Terminal: Send {
-    async fn new_order(&mut self, input: &NewOrder) -> anyhow::Result<()>;
-    async fn payment(&mut self, input: &Payment) -> anyhow::Result<()>;
-    async fn order_status(&mut self, input: &OrderStatus) -> anyhow::Result<()>;
-    async fn delivery(&mut self, input: &Delivery) -> anyhow::Result<()>;
-    async fn stock_level(&mut self, input: &StockLevel) -> anyhow::Result<()>;
+    async fn new_order(
+        &mut self,
+        input: &NewOrder,
+    ) -> anyhow::Result<Result<NewOrderOut, NewOrderRollbackOut>>;
+    async fn payment(&mut self, input: &Payment) -> anyhow::Result<PaymentOut>;
+    async fn order_status(&mut self, input: &OrderStatus) -> anyhow::Result<OrderStatusOut>;
+    async fn delivery(&mut self, input: &Delivery) -> anyhow::Result<DeliveryOut>;
+    async fn stock_level(&mut self, input: &StockLevel) -> anyhow::Result<StockLevelOut>;
 }
 
 pub const TERMINAL_WIDTH: usize = 80;
