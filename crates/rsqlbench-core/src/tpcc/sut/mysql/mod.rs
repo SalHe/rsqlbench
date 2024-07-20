@@ -742,8 +742,14 @@ PRIMARY KEY (`s_w_id`,`s_i_id`)
             "district",
             "warehouse",
         ] {
+            info!("Dropping table {table}...");
             let sql = format!("drop table `{table}`;");
-            conn.execute(sql.as_str()).await?;
+            let _ = conn.execute(sql.as_str()).await;
+        }
+        for proc in ["delivery", "neword", "ostat", "payment", "slev"] {
+            info!("Dropping procedure {proc}...");
+            let sql = format!("drop procedure `{proc}`;");
+            let _ = conn.execute(sql.as_str()).await;
         }
         Ok(())
     }
