@@ -1,20 +1,24 @@
-loader:
-  monkeys: 10
-  warehouse: 1
-connection:
-  database: rsqlbench
-  connections:
-    schema: mysql://root:root@localhost/
-    loader: mysql://root:root@localhost/rsqlbench
-    benchmark: mysql://root:root@localhost/rsqlbench
-benchmark:
-  tpcc:
-    keying_and_thinking: false
-    ramp_up: 5
-    baking: 10
-    terminals: 450
-    transactions:
-      payment: 43
-      order_status: 4
-      delivery: 4
-      stock_level: 4
+monitor:
+  listen_addr: 0.0.0.0:8659
+  path: /prometheus
+bench:
+  loader:
+    monkeys: 10
+    warehouse: 10
+  connection:
+    database: rsqlbench
+    connections:
+      schema: mysql://root:root@localhost/
+      loader: mysql://root:root@localhost/rsqlbench
+      benchmark: mysql://root:root@localhost/rsqlbench
+  benchmark:
+    tpcc:
+      keying_and_thinking: false
+      ramp_up: 5
+      baking: 100
+      terminals: 100
+      transactions:
+        payment: 43
+        order_status: 4
+        delivery: 4
+        stock_level: 4

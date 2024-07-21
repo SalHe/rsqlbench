@@ -1,9 +1,4 @@
-use std::{
-    collections::HashMap,
-    rc::Rc,
-    sync::atomic::{AtomicU64, Ordering},
-    time::Duration,
-};
+use std::{collections::HashMap, rc::Rc, time::Duration};
 
 use anyhow::anyhow;
 use case_style::CaseStyle;
@@ -27,8 +22,10 @@ use tokio::{
 
 use tracing::{debug, error, info, instrument, trace, warn};
 
-static TOTAL_NEW_ORDERS: AtomicU64 = AtomicU64::new(0);
-static TOTAL_TRANSACTIONS: AtomicU64 = AtomicU64::new(0);
+use crate::monitor::{TPM_NEW_ORDER, TPM_TOTAL, TX_NEW_ORDER, TX_TOTAL};
+
+// static TOTAL_NEW_ORDERS: AtomicU64 = AtomicU64::new(0);
+// static TOTAL_TRANSACTIONS: AtomicU64 = AtomicU64::new(0);
 
 #[allow(clippy::too_many_arguments)] // TODO
 #[instrument(skip(terminal, rx_stop))]
@@ -62,7 +59,7 @@ async fn tpcc_benchmark(
                     Err(rb) => trace!(%rb, "Failed to create new order"),
                 }
                 if !input.rollback_last {
-                    TOTAL_NEW_ORDERS.fetch_add(1, Ordering::SeqCst);
+                    TX_NEW_ORDER.inc();
                 }
             }
             Transaction::Payment(input) => {
@@ -86,7 +83,7 @@ async fn tpcc_benchmark(
                 trace!(%out, "Query stock level");
             }
         }
-        TOTAL_TRANSACTIONS.fetch_add(1, Ordering::SeqCst);
+        TX_TOTAL.inc();
         if keying {
             sleep(tx.thinking_duration()).await;
         }
@@ -173,37 +170,45 @@ async fn wait_for_benchmark(
     tx_stop: broadcast::Sender<()>,
 ) -> anyhow::Result<()> {
     let mut join_set = join_set;
-    let one_minute = Duration::from_secs(60);
+    const GATHER_INTERVAL_SECONDS: u64 = 10;
+    const ONE_MINUTES_SECONDS: u64 = 60;
+    const TIMES: u64 = ONE_MINUTES_SECONDS / GATHER_INTERVAL_SECONDS;
+    let gather_duration = Duration::from_secs(GATHER_INTERVAL_SECONDS);
     let mut ramp_up: Option<(u64, u64)> = if tpcc.ramp_up == 0 {
         Some((0, 0))
     } else {
         None
     };
-    let mut ticker = interval_at(Instant::now() + one_minute, one_minute);
-    let mut minutes = 0;
+    let mut ticker = interval_at(Instant::now() + gather_duration, gather_duration);
+    let mut hits = 0;
     loop {
         select! {
             _ = ticker.tick() => {
-                let mut total_new_orders = TOTAL_NEW_ORDERS.load(Ordering::SeqCst);
-                let mut total_transactions = TOTAL_TRANSACTIONS.load(Ordering::SeqCst);
+                let mut total_new_orders = TX_NEW_ORDER.get();
+                let mut total_transactions = TX_TOTAL.get();
                 if let Some((no, tx)) = ramp_up {
                     total_new_orders -= no;
                     total_transactions -= tx;
                 }
-                minutes += 1;
+                hits += 1;
+                let tpmc_no = (total_new_orders as f64) / (hits as f64) * (TIMES as f64) ;
+                let tpmc_total = (total_transactions as f64) / (hits as f64) * (TIMES as f64);
+                TPM_NEW_ORDER.set(tpmc_no);
+                TPM_TOTAL.set(tpmc_total);
                 info!(
-                    minutes,
+                    hits,
+                    seconds = hits * GATHER_INTERVAL_SECONDS,
                     total_new_orders,
                     total_transactions,
                     baking = ramp_up.is_some(),
-                    tpmC_NewOrder = (total_new_orders as f64) / (minutes as f64),
-                    tpmTOTAL = (total_transactions as f64) / (minutes as f64),
+                    tpmC_NewOrder = tpmc_no,
+                    tpmTOTAL = tpmc_total,
                 );
-                if minutes == tpcc.ramp_up && ramp_up.is_none() {
+                if hits / TIMES == (tpcc.ramp_up as u64) && ramp_up.is_none() {
                     info!("Ramp up finished");
                     ramp_up = Some((total_new_orders, total_transactions));
-                    minutes = 0;
-                } else if minutes == tpcc.baking && ramp_up.is_some() {
+                    hits = 0;
+                } else if hits / TIMES == (tpcc.baking as u64) && ramp_up.is_some() {
                     tx_stop.send(()).unwrap();
                     break;
                 }
@@ -225,17 +230,17 @@ async fn wait_for_benchmark(
     info!(
         total_new_orders,
         total_transactions,
-        tpmC_NewOrder = (total_new_orders as f64) / (tpcc.ramp_up as f64),
-        tpmTOTAL = (total_transactions as f64) / (tpcc.ramp_up as f64),
+        tpmC_NewOrder = (total_new_orders as f64) / (tpcc.ramp_up as f64) * (TIMES as f64),
+        tpmTOTAL = (total_transactions as f64) / (tpcc.ramp_up as f64) * (TIMES as f64),
         "Result during Ramp up"
     );
-    let total_new_orders = TOTAL_NEW_ORDERS.load(Ordering::SeqCst) - total_new_orders;
-    let total_transactions = TOTAL_TRANSACTIONS.load(Ordering::SeqCst) - total_transactions;
+    let total_new_orders = TX_NEW_ORDER.get() - total_new_orders;
+    let total_transactions = TX_TOTAL.get() - total_transactions;
     info!(
         total_new_orders,
         total_transactions,
-        tpmC_NewOrder = (total_new_orders as f64) / (tpcc.baking as f64),
-        tpmTOTAL = (total_transactions as f64) / (tpcc.baking as f64),
+        tpmC_NewOrder = (total_new_orders as f64) / (tpcc.baking as f64) * (TIMES as f64),
+        tpmTOTAL = (total_transactions as f64) / (tpcc.baking as f64) * (TIMES as f64),
         "Result for Benchmark"
     );
     while let Some(j) = join_set.join_next().await {

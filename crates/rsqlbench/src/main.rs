@@ -1,19 +1,23 @@
 mod benchmark;
+mod cfg;
 mod loader;
+mod monitor;
 
 use std::rc::Rc;
 
 use anyhow::{anyhow, Context};
+use cfg::RSBConfig;
 use clap::{Parser, Subcommand};
 use config::{Config, Environment, File};
+use monitor::{register_registry, spawn_prometheus, REGISTRY};
 use rsqlbench_core::{
-    cfg::{BenchConfig, Connection},
+    cfg::Connection,
     tpcc::sut::{MysqlSut, Sut},
 };
 #[cfg(feature = "yasdb")]
 use rsqlbench_yasdb::YasdbSut;
 use time::{format_description::well_known::Rfc3339, UtcOffset};
-use tracing::{info, level_filters::LevelFilter, warn};
+use tracing::{error, info, level_filters::LevelFilter, warn};
 use tracing_subscriber::{fmt::time::OffsetTime, EnvFilter};
 use url::Url;
 
@@ -55,7 +59,7 @@ enum DbVerifyError {
     DifferentSut,
 }
 
-fn check_same_db_type(connection: &Connection) -> Result<String, DbVerifyError> {
+fn determine_db_type(connection: &Connection) -> Result<String, DbVerifyError> {
     let parsed = [
         &connection.connections.schema,
         &connection.connections.loader,
@@ -110,17 +114,17 @@ async fn main() -> anyhow::Result<()> {
         )
         .init();
 
-    let cfg: BenchConfig = Config::builder()
+    let root_cfg: RSBConfig = Config::builder()
         .add_source(File::with_name(&cli.config))
         .add_source(Environment::with_prefix("RSB"))
         .build()
         .with_context(|| "Could not load config properly.")?
         .try_deserialize()
         .with_context(|| "Could not deserialize config file.")?;
+    info!(?root_cfg, "Using config");
 
-    info!(?cfg, "Using config");
-
-    let sut_type = check_same_db_type(&cfg.connection)?;
+    let cfg = root_cfg.bench;
+    let sut_type = determine_db_type(&cfg.connection)?;
 
     info!(sut_type);
     let sut: Rc<Box<dyn Sut>> = match sut_type.as_str() {
@@ -130,6 +134,19 @@ async fn main() -> anyhow::Result<()> {
         #[cfg(not(feature = "yasdb"))]
         "yasdb" => return Err(anyhow!("yasdb not implement in current rsqlbench distribution, please compile rsqlbench with feature `yasdb`.")),
         _ => return Err(anyhow!("Unsupported sut/db.")),
+    };
+
+    register_registry()?;
+
+    let prometheus = if let Some(monitor) = root_cfg.monitor {
+        if monitor.enable {
+            info!("Enable REST API for prometheus");
+            Some(tokio::spawn(spawn_prometheus(monitor)))
+        } else {
+            None
+        }
+    } else {
+        None
     };
 
     match cli.command {
@@ -149,7 +166,10 @@ async fn main() -> anyhow::Result<()> {
                 info!("Prepare to benchmark...");
                 benchmark::benchmark(cfg.loader.warehouse as _, sut.clone(), &cfg.benchmark.tpcc)
                     .await?;
+                let encoder = prometheus::TextEncoder::new();
+                let gathered = encoder.encode_to_string(&REGISTRY.gather())?;
                 info!("Benchmark finished.");
+                info!("{gathered}");
             }
             TpccCommand::Destroy => {
                 info!("Destroying schema...");
@@ -157,6 +177,10 @@ async fn main() -> anyhow::Result<()> {
                 info!("Schema Destroyed.");
             }
         },
+    }
+
+    if let Some(p) = prometheus {
+        p.abort();
     }
 
     Ok(())
