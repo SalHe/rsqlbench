@@ -128,7 +128,7 @@ async fn main() -> anyhow::Result<()> {
 
     info!(sut_type);
     let sut: Rc<Box<dyn Sut>> = match sut_type.as_str() {
-        "mysql" => Rc::new(Box::new(MysqlSut::new(cfg.connection))),
+        "mysql" => Rc::new(Box::new(MysqlSut::new(cfg.connection, cfg.loader.warehouse))),
         #[cfg(feature = "yasdb")]
         "yasdb" => Rc::new(Box::new(YasdbSut::new(cfg.connection))),
         #[cfg(not(feature = "yasdb"))]

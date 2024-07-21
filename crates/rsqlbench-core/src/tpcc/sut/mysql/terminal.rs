@@ -14,11 +14,15 @@ use crate::tpcc::{
 
 pub struct MysqlTerminal {
     conn: MySqlConnection,
+    warehouse_count: u32,
 }
 
 impl MysqlTerminal {
-    pub fn new(conn: MySqlConnection) -> Self {
-        Self { conn }
+    pub fn new(conn: MySqlConnection, warehouse_count: u32) -> Self {
+        Self {
+            conn,
+            warehouse_count,
+        }
     }
 }
 
@@ -39,7 +43,7 @@ impl Terminal for MysqlTerminal {
         } = input;
         // It's complicated to pass generated order lines, just generate in database.
         sqlx::query(&format!("CALL NEWORD('{warehouse_id}','{warehouse_count}','{district_id}','{customer_id}','{orders}', @discount, @lastname, @credit, @district_tax, @warehouse_tax, @next_order_id, NOW())",
-                    warehouse_count = 1,
+                    warehouse_count = self.warehouse_count,
                     orders = input.order_lines.len()
             ))
             .execute(&mut self.conn)

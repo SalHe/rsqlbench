@@ -14,11 +14,15 @@ use super::{Sut, Terminal};
 
 pub struct MysqlSut {
     connection: ConnectionCfg,
+    warehouse_count: u32,
 }
 
 impl MysqlSut {
-    pub fn new(connection: ConnectionCfg) -> Self {
-        Self { connection }
+    pub fn new(connection: ConnectionCfg, warehouse_count: u32) -> Self {
+        Self {
+            connection,
+            warehouse_count,
+        }
     }
 
     #[instrument(skip(self))]
@@ -556,6 +560,7 @@ impl Sut for MysqlSut {
     async fn terminal(&self, _id: u32) -> anyhow::Result<Box<dyn Terminal>> {
         Ok(Box::new(MysqlTerminal::new(
             MySqlConnection::connect(&self.connection.connections.benchmark).await?,
+            self.warehouse_count,
         )))
     }
 
