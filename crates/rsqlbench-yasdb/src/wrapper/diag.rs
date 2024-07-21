@@ -6,7 +6,7 @@ use crate::native::{yacGetDiagRec, EnYacResult_YAC_ERROR, YacTextPos};
 pub struct DiagInfo {
     _message: String,
     _sql_state: String,
-    _code: i32,
+    pub code: i32,
     _pos: (i32, i32),
     _sql: Option<String>,
 }
@@ -62,7 +62,7 @@ pub fn get_error(sql: Option<String>) -> Option<DiagInfo> {
         Some(DiagInfo {
             _message: message,
             _sql_state: sql_state,
-            _code: err_code,
+            code: err_code,
             _pos: pos,
             _sql: sql,
         })

@@ -130,7 +130,7 @@ async fn main() -> anyhow::Result<()> {
     let sut: Rc<Box<dyn Sut>> = match sut_type.as_str() {
         "mysql" => Rc::new(Box::new(MysqlSut::new(cfg.connection, cfg.loader.warehouse))),
         #[cfg(feature = "yasdb")]
-        "yasdb" => Rc::new(Box::new(YasdbSut::new(cfg.connection))),
+        "yasdb" => Rc::new(Box::new(YasdbSut::new(cfg.connection, cfg.loader.warehouse))),
         #[cfg(not(feature = "yasdb"))]
         "yasdb" => return Err(anyhow!("yasdb not implement in current rsqlbench distribution, please compile rsqlbench with feature `yasdb`.")),
         _ => return Err(anyhow!("Unsupported sut/db.")),

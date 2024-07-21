@@ -22,6 +22,10 @@ A TPC-C like benchmark tool.
 cargo build --feature yasdb --release
 ```
 
+## TODOs
+
+- [ ] Safety of yasdb: spawn_blocking using ref.
+
 ## References
 
 - [TPC-C Specification](https://www.tpc.org/TPC_Documents_Current_Versions/pdf/tpc-c_v5.11.0.pdf)
