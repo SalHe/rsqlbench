@@ -1,3 +1,5 @@
+use std::sync::{Arc, Mutex};
+
 use rsqlbench_core::{
     cfg::Connection as ConnectionCfg,
     tpcc::{
@@ -10,7 +12,7 @@ use tracing::{info, warn};
 
 use crate::{
     native::{yacConnect, EnYacResult_YAC_ERROR},
-    wrapper::{DbcHandle, EnvHandle, Error, SimpleExecutor, StatementHandle},
+    wrapper::{DbcHandle, EnvHandle, Error, SimpleExecutor},
     Connection, YasdbLoader, YasdbTerminal,
 };
 
@@ -86,7 +88,7 @@ impl Sut for YasdbSut {
             r"CREATE TABLE OORDER (O_ID NUMBER, O_W_ID NUMBER, O_D_ID NUMBER, O_C_ID NUMBER, O_CARRIER_ID NUMBER, O_OL_CNT NUMBER, O_ALL_LOCAL NUMBER, O_ENTRY_D DATE)",
             r"CREATE TABLE ORDER_LINE (OL_W_ID NUMBER, OL_D_ID NUMBER, OL_O_ID NUMBER, OL_NUMBER NUMBER, OL_I_ID NUMBER, OL_DELIVERY_D DATE, OL_AMOUNT NUMBER, OL_SUPPLY_W_ID NUMBER, OL_QUANTITY NUMBER, OL_DIST_INFO CHAR(24), CONSTRAINT IORDL PRIMARY KEY (OL_W_ID, OL_D_ID, OL_O_ID, OL_NUMBER) ENABLE)",
         ];
-        let mut exec = SimpleExecutor::new(StatementHandle::new(&conn.conn_handle)?);
+        let mut exec = SimpleExecutor::new(Arc::new(Mutex::new(conn)))?;
         for sql in sql_set {
             info!(ddl = sql, "Creating table");
             exec.execute(sql).await?;
@@ -98,7 +100,7 @@ impl Sut for YasdbSut {
         let conn = self
             .connect(self.connection.connections.schema.to_string())
             .await?;
-        let mut exec = SimpleExecutor::new(StatementHandle::new(&conn.conn_handle)?);
+        let mut exec = SimpleExecutor::new(Arc::new(Mutex::new(conn)))?;
 
         // Build indexes
         let sql_set = [
@@ -1140,6 +1142,7 @@ END;",
         let conn = self
             .connect(self.connection.connections.schema.to_string())
             .await?;
+        let conn = Arc::new(Mutex::new(conn));
 
         // Drop tables
         let tables = [
@@ -1153,7 +1156,7 @@ END;",
             "OORDER",
             "ORDER_LINE",
         ];
-        let mut exec = SimpleExecutor::new(StatementHandle::new(&conn.conn_handle)?);
+        let mut exec = SimpleExecutor::new(conn.clone())?;
         for table in tables {
             info!(table, "Dropping table");
             match exec.execute(&format!("drop table {table}")).await {
@@ -1164,7 +1167,7 @@ END;",
 
         // Drop procedures
         let procedures = ["NEWORD", "OSTAT", "PAYMENT", "DELIVERY", "SLEV"];
-        let mut exec = SimpleExecutor::new(StatementHandle::new(&conn.conn_handle)?);
+        let mut exec = SimpleExecutor::new(conn)?;
         for procedure in procedures {
             info!(procedure, "Dropping procedure");
             match exec.execute(&format!("drop procedure {procedure}")).await {

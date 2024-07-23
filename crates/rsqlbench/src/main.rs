@@ -112,6 +112,8 @@ async fn main() -> anyhow::Result<()> {
             OffsetTime::local_rfc_3339()
                 .unwrap_or(OffsetTime::new(UtcOffset::from_hms(8, 0, 0)?, Rfc3339)),
         )
+        .with_thread_ids(true)
+        .with_thread_names(true)
         .init();
 
     let root_cfg: RSBConfig = Config::builder()

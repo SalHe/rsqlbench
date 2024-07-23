@@ -15,7 +15,6 @@ macro_rules! handle {
         pub struct $name(pub YacHandle);
 
         unsafe impl Send for $name {}
-        unsafe impl Sync for $name {}
 
         impl $name {
             pub fn new($(input: &$input)?) -> Result<Self, Error> {
