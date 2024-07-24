@@ -230,8 +230,8 @@ async fn wait_for_benchmark(
     info!(
         total_new_orders,
         total_transactions,
-        tpmC_NewOrder = (total_new_orders as f64) / (tpcc.ramp_up as f64) * (TIMES as f64),
-        tpmTOTAL = (total_transactions as f64) / (tpcc.ramp_up as f64) * (TIMES as f64),
+        tpmC_NewOrder = (total_new_orders as f64) / (tpcc.ramp_up as f64),
+        tpmTOTAL = (total_transactions as f64) / (tpcc.ramp_up as f64),
         "Result during Ramp up"
     );
     let total_new_orders = TX_NEW_ORDER.get() - total_new_orders;
@@ -239,8 +239,8 @@ async fn wait_for_benchmark(
     info!(
         total_new_orders,
         total_transactions,
-        tpmC_NewOrder = (total_new_orders as f64) / (tpcc.baking as f64) * (TIMES as f64),
-        tpmTOTAL = (total_transactions as f64) / (tpcc.baking as f64) * (TIMES as f64),
+        tpmC_NewOrder = (total_new_orders as f64) / (tpcc.baking as f64),
+        tpmTOTAL = (total_transactions as f64) / (tpcc.baking as f64),
         "Result for Benchmark"
     );
     while let Some(j) = join_set.join_next().await {

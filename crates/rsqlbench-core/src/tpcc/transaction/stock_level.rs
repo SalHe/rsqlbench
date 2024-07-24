@@ -93,7 +93,7 @@ pub struct StockLevelOut {
     pub warehouse_id: u32,
     pub district_id: u8,
     pub threshold: u8,
-    pub low_stock: u8,
+    pub low_stock: u32,
 }
 
 impl Display for StockLevelOut {

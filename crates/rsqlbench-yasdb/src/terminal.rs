@@ -18,8 +18,8 @@ use tracing::trace;
 use crate::{
     guard_yac_call,
     native::{
-        yacBindParameter, yacExecute, yacPrepare, EnYacExtType_YAC_SQLT_FLOAT,
-        EnYacExtType_YAC_SQLT_INTEGER, EnYacExtType_YAC_SQLT_VARCHAR2,
+        yacBindParameter, yacExecute, yacPrepare, EnYacExtType_YAC_SQLT_DATE,
+        EnYacExtType_YAC_SQLT_FLOAT, EnYacExtType_YAC_SQLT_INTEGER, EnYacExtType_YAC_SQLT_VARCHAR2,
         EnYacParamDirection_YAC_PARAM_OUTPUT, YacParamDirection, YacUint16, YacUint32,
     },
     wrapper::{Error, Statement, StatementHandle},
@@ -509,16 +509,220 @@ impl Terminal for YasdbTerminal {
         .await?
     }
 
-    async fn order_status(&mut self, _input: &OrderStatus) -> anyhow::Result<OrderStatusOut> {
-        unimplemented!()
+    async fn order_status(&mut self, input: &OrderStatus) -> anyhow::Result<OrderStatusOut> {
+        let stmt = Arc::new(Mutex::new(Statement::new(self.conn.clone())?));
+        let OrderStatus {
+            warehouse_id,
+            district_id,
+            customer,
+        } = input;
+        let warehouse_id = *warehouse_id;
+        let district_id = *district_id;
+        let (by_name, c_last_name, mut customer_id) = match customer {
+            CustomerSelector::LastName(n) => (1, n.clone(), 0),
+            CustomerSelector::ID(id) => (0, "".to_string(), *id),
+        };
+        {
+            let stmt = stmt.clone();
+            let sql = format!(
+                "CALL OSTAT({warehouse_id}, {district_id}, ?, {by_name}, ?, ?, ?, ?, ?, ?, ?)"
+            );
+            trace!(sql);
+            spawn_blocking(move || unsafe {
+                guard_yac_call!(yacPrepare(
+                    stmt.lock().unwrap().handle().0,
+                    sql.as_ptr() as _,
+                    sql.len() as _
+                ))
+            })
+            .await??;
+        }
+
+        spawn_blocking(move || {
+            // Safety: all binding variables must live until yacExecute finished
+            let mut first_name = [0u8; 17];
+            let mut last_name = [0u8; 16];
+            let mut middle_name = [0u8; 3];
+            let mut balance = 0.0f32;
+            let mut order_id = 0u32;
+            let mut entdate = [0u8; 20];
+            let mut carrier_id = 0u8;
+            last_name[0..c_last_name.len()].copy_from_slice(c_last_name.as_bytes());
+            let stmt_locked = stmt.lock().unwrap();
+            let handle = stmt_locked.handle();
+            let executed = unsafe {
+                yac_bind_parameter(
+                    handle,
+                    1,
+                    EnYacParamDirection_YAC_PARAM_OUTPUT,
+                    EnYacExtType_YAC_SQLT_INTEGER,
+                    &mut customer_id,
+                )?;
+                yac_bind_parameter_buffer(
+                    handle,
+                    2,
+                    EnYacParamDirection_YAC_PARAM_OUTPUT,
+                    EnYacExtType_YAC_SQLT_VARCHAR2,
+                    &mut last_name,
+                )?;
+                yac_bind_parameter_buffer(
+                    handle,
+                    3,
+                    EnYacParamDirection_YAC_PARAM_OUTPUT,
+                    EnYacExtType_YAC_SQLT_VARCHAR2,
+                    &mut first_name,
+                )?;
+                yac_bind_parameter_buffer(
+                    handle,
+                    4,
+                    EnYacParamDirection_YAC_PARAM_OUTPUT,
+                    EnYacExtType_YAC_SQLT_VARCHAR2,
+                    &mut middle_name,
+                )?;
+                yac_bind_parameter(
+                    handle,
+                    5,
+                    EnYacParamDirection_YAC_PARAM_OUTPUT,
+                    EnYacExtType_YAC_SQLT_FLOAT,
+                    &mut balance,
+                )?;
+                yac_bind_parameter(
+                    handle,
+                    6,
+                    EnYacParamDirection_YAC_PARAM_OUTPUT,
+                    EnYacExtType_YAC_SQLT_FLOAT,
+                    &mut order_id,
+                )?;
+                yac_bind_parameter_buffer(
+                    handle,
+                    7,
+                    EnYacParamDirection_YAC_PARAM_OUTPUT,
+                    EnYacExtType_YAC_SQLT_DATE,
+                    &mut entdate,
+                )?;
+                yac_bind_parameter(
+                    handle,
+                    8,
+                    EnYacParamDirection_YAC_PARAM_OUTPUT,
+                    EnYacExtType_YAC_SQLT_INTEGER,
+                    &mut carrier_id,
+                )?;
+                guard_yac_call!(yacExecute(handle.0))
+            };
+            match executed {
+                Ok(_) => Ok(OrderStatusOut {
+                    warehouse_id,
+                    district_id,
+                    customer_id: Some(customer_id),
+                    customer_last_name: Some(String::from_utf8_lossy(&last_name).to_string()),
+                    customer_middle_name: Some(String::from_utf8_lossy(&middle_name).to_string()),
+                    customer_first_name: Some(String::from_utf8_lossy(&first_name).to_string()),
+                    customer_balance: Some(balance),
+                    order_id: Some(order_id),
+                    carrier_id: Some(carrier_id),
+                    entry_date: Some(OffsetDateTime::now_utc()),
+                    order_lines: vec![],
+                }),
+                Err(Error::YasClient(e)) if e.code == 5206 => Ok(OrderStatusOut {
+                    warehouse_id,
+                    district_id,
+                    customer_id: None,
+                    customer_last_name: None,
+                    customer_middle_name: None,
+                    customer_first_name: None,
+                    customer_balance: None,
+                    order_id: None,
+                    carrier_id: None,
+                    entry_date: None,
+                    order_lines: vec![],
+                }),
+                Err(e) => Err(e),
+            }
+        })
+        .await?
+        .map_err(|x| x.into())
     }
 
-    async fn delivery(&mut self, _input: &Delivery) -> anyhow::Result<DeliveryOut> {
-        unimplemented!()
+    async fn delivery(&mut self, input: &Delivery) -> anyhow::Result<DeliveryOut> {
+        let stmt = Arc::new(Mutex::new(Statement::new(self.conn.clone())?));
+        let Delivery {
+            warehouse_id,
+            carrier_id,
+        } = input;
+        let warehouse_id = *warehouse_id;
+        let carrier_id = *carrier_id;
+        let stmt = stmt.clone();
+        let sql = format!("CALL DELIVERY({warehouse_id}, {carrier_id}, now())");
+        trace!(sql);
+        let executed = spawn_blocking(move || -> Result<(), Error> {
+            unsafe {
+                let stmt_locked = stmt.lock().unwrap();
+                let handle = stmt_locked.handle();
+                guard_yac_call!(yacPrepare(handle.0, sql.as_ptr() as _, sql.len() as _))?;
+                guard_yac_call!(yacExecute(handle.0))
+            }
+        })
+        .await?;
+        match executed {
+            Ok(_) => Ok(DeliveryOut {
+                warehouse_id,
+                carrier_id,
+            }),
+            Err(Error::YasClient(e)) if e.code == 5206 => Ok(DeliveryOut {
+                warehouse_id,
+                carrier_id,
+            }),
+            Err(e) => Err(e.into()),
+        }
     }
 
-    async fn stock_level(&mut self, _input: &StockLevel) -> anyhow::Result<StockLevelOut> {
-        unimplemented!()
+    async fn stock_level(&mut self, input: &StockLevel) -> anyhow::Result<StockLevelOut> {
+        let stmt = Arc::new(Mutex::new(Statement::new(self.conn.clone())?));
+        let StockLevel {
+            warehouse_id,
+            district_id,
+            threshold,
+        } = input;
+        let warehouse_id = *warehouse_id;
+        let district_id = *district_id;
+        let threshold = *threshold;
+        {
+            let stmt = stmt.clone();
+            let sql = format!("CALL SLEV({warehouse_id}, {district_id}, {threshold}, ?)");
+            trace!(sql);
+            spawn_blocking(move || unsafe {
+                guard_yac_call!(yacPrepare(
+                    stmt.lock().unwrap().handle().0,
+                    sql.as_ptr() as _,
+                    sql.len() as _
+                ))
+            })
+            .await??;
+        }
+
+        spawn_blocking(move || {
+            // Safety: all binding variables must live until yacExecute finished
+            let mut stock_count = 0u32;
+            let stmt_locked = stmt.lock().unwrap();
+            let handle = stmt_locked.handle();
+            unsafe {
+                yac_bind_parameter(
+                    handle,
+                    1,
+                    EnYacParamDirection_YAC_PARAM_OUTPUT,
+                    EnYacExtType_YAC_SQLT_INTEGER,
+                    &mut stock_count,
+                )?;
+                guard_yac_call!(yacExecute(handle.0))?;
+            };
+            Ok(StockLevelOut {
+                warehouse_id,
+                district_id,
+                threshold,
+                low_stock: stock_count,
+            })
+        })
+        .await?
     }
 }
 
