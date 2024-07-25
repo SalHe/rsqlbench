@@ -24,8 +24,8 @@ url = "2.5.2"
 thiserror = { workspace = true }
 serde = { workspace = true }
 prometheus = { version = "0.13.4", features = ["process"] }
-lazy_static = "1.5.0"
 axum = "0.7.5"
+once_cell = { workspace = true }
 
 [features]
 yasdb = ["rsqlbench-yasdb"]

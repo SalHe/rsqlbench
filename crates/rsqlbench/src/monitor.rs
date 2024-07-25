@@ -1,20 +1,19 @@
 use axum::{routing::get, Router};
-use lazy_static::lazy_static;
+use once_cell::sync::Lazy;
 use prometheus::{Gauge, IntCounter, Registry};
 
 use crate::cfg::Monitor;
 
-lazy_static! {
-    pub static ref REGISTRY: Registry = Registry::new();
-    pub static ref TX_NEW_ORDER: IntCounter =
-        IntCounter::new("tx_new_order", "Transaction(New Order)").expect("metric can be created");
-    pub static ref TPM_NEW_ORDER: Gauge =
-        Gauge::new("tpmc_new_order", "tpmC(New Order)").expect("metric can be created");
-    pub static ref TX_TOTAL: IntCounter =
-        IntCounter::new("tx_total", "Transaction TOTAL").expect("metric can be created");
-    pub static ref TPM_TOTAL: Gauge =
-        Gauge::new("tpmc_total", "tpmC TOTAL").expect("metric can be created");
-}
+pub static REGISTRY: Lazy<Registry> = Lazy::new(Registry::new);
+pub static TX_NEW_ORDER: Lazy<IntCounter> = Lazy::new(|| {
+    IntCounter::new("tx_new_order", "Transaction(New Order)").expect("metric can be created")
+});
+pub static TPM_NEW_ORDER: Lazy<Gauge> =
+    Lazy::new(|| Gauge::new("tpmc_new_order", "tpmC(New Order)").expect("metric can be created"));
+pub static TX_TOTAL: Lazy<IntCounter> =
+    Lazy::new(|| IntCounter::new("tx_total", "Transaction TOTAL").expect("metric can be created"));
+pub static TPM_TOTAL: Lazy<Gauge> =
+    Lazy::new(|| Gauge::new("tpmc_total", "tpmC TOTAL").expect("metric can be created"));
 
 pub fn register_registry() -> anyhow::Result<()> {
     REGISTRY.register(Box::new(TPM_NEW_ORDER.clone()))?;

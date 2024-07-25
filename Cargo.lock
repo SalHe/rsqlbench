@@ -1812,7 +1812,7 @@ dependencies = [
  "case_style",
  "clap",
  "config",
- "lazy_static",
+ "once_cell",
  "prometheus",
  "rsqlbench-core",
  "rsqlbench-yasdb",

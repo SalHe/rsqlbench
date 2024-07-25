@@ -1,3 +1,5 @@
+monitor:
+  listen_addr: 0.0.0.0:8659
 bench:
   loader:
     monkeys: 20
@@ -17,7 +19,7 @@ bench:
       keying_and_thinking: false
       ramp_up: 5
       baking: 10
-      terminals: 450
+      terminals: 150
       transactions:
         payment: 43
         order_status: 4
