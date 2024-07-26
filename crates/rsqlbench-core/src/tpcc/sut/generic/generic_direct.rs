@@ -150,8 +150,10 @@ async fn load_customers(
     );
     assert!(CUSTOMER_PER_DISTRICT % batch_size == 0);
     const CUSTOMER_SQL: &str = "INSERT INTO customer ( c_id, c_d_id, c_w_id, c_first, c_middle, c_last, c_street_1, c_street_2, c_city, c_state, c_zip, c_phone, c_since, c_credit, c_credit_lim, c_discount, c_balance, c_ytd_payment, c_payment_cnt, c_delivery_cnt, c_data) VALUES";
+    const HISTORY_SQL: &str = "INSERT INTO history (h_c_id, h_c_d_id, h_c_w_id, h_d_id, h_w_id, h_date, h_amount, h_data) VALUES ";
 
     let mut customer_sql = CUSTOMER_SQL.to_string();
+    let mut history_sql = HISTORY_SQL.to_string();
     for customer in CustomerGenerator::from_district(district) {
         let Customer {
             id,
@@ -176,14 +178,6 @@ async fn load_customers(
             data,
         } = &customer;
         customer_sql.push_str(&format!("('{id}', '{district_id}', '{warehouse_id}', '{first_name}', '{middle_name}', '{last_name}', '{street0}', '{street1}', '{city}', '{state}', '{zip}', '{phone}', NOW(), '{credit}', '{credit_limit}', '{discount}', '{balance}', '{ytd_payment}', '{payment_count}', '{delivery_count}', '{data}'),"));
-        if customer.id % (batch_size as u16) == 0 {
-            executor
-                .execute(&customer_sql[0..customer_sql.len() - 1])
-                .await?;
-            customer_sql.clear();
-            customer_sql.push_str(CUSTOMER_SQL);
-        }
-
         for history in HistoryGenerator::from_customer(&customer) {
             let History {
                 customer_id,
@@ -195,8 +189,19 @@ async fn load_customers(
                 amount,
                 data,
             } = history;
-            executor.execute(&format!("INSERT INTO history (h_c_id, h_c_d_id, h_c_w_id, h_d_id, h_w_id, h_date, h_amount, h_data) VALUES ('{customer_id}', '{customer_district_id}', '{customer_warehouse_id}', '{district_id}', '{warehouse_id}', NOW(), '{amount}', '{data}')"))
+            history_sql.push_str(&format!("('{customer_id}', '{customer_district_id}', '{customer_warehouse_id}', '{district_id}', '{warehouse_id}', NOW(), '{amount}', '{data}'),"));
+        }
+        if customer.id % (batch_size as u16) == 0 {
+            executor
+                .execute(&customer_sql[0..customer_sql.len() - 1])
                 .await?;
+            executor
+                .execute(&history_sql[0..history_sql.len() - 1])
+                .await?;
+            customer_sql.clear();
+            history_sql.clear();
+            customer_sql.push_str(CUSTOMER_SQL);
+            history_sql.push_str(HISTORY_SQL);
         }
     }
     Ok(())
@@ -212,9 +217,13 @@ async fn load_orders(
         d_id = district.id,
         id = district.warehouse_id,
     );
-    const SQL_ORDER: &str = "INSERT INTO oorder (o_id, o_d_id, o_w_id, o_c_id, o_entry_d, o_carrier_id, o_ol_cnt, o_all_local) VALUES";
+    const ORDER_SQL: &str = "INSERT INTO oorder (o_id, o_d_id, o_w_id, o_c_id, o_entry_d, o_carrier_id, o_ol_cnt, o_all_local) VALUES";
+    const NEW_ORDER_SQL: &str = "INSERT INTO new_order (no_o_id, no_d_id, no_w_id) VALUES ";
+    const ORDER_LINE_SQL: &str = "INSERT INTO order_line (ol_o_id, ol_d_id, ol_w_id, ol_number, ol_i_id, ol_supply_w_id, ol_delivery_d, ol_quantity, ol_amount, ol_dist_info) VALUES";
     assert!(ORDERS_PER_DISTRICT % batch_size == 0);
-    let mut sql_order = SQL_ORDER.to_string();
+    let mut order_sql = ORDER_SQL.to_string();
+    let mut new_order_sql = NEW_ORDER_SQL.to_string();
+    let mut order_line_sql = ORDER_LINE_SQL.to_string();
 
     for (order, new_order) in OrderGenerator::from_district(district) {
         let Order {
@@ -231,28 +240,19 @@ async fn load_orders(
             .map(|x| x.to_string())
             .unwrap_or("NULL".to_string());
         let all_local = if all_local { 1 } else { 0 };
-        sql_order.push_str(&format!("('{id}', '{district_id}', '{warehouse_id}', '{customer_id}', NOW(), {carrier_id}, '{order_lines_count}', '{all_local}'),"));
-        if order.id % (batch_size as u32) == 0 {
-            executor.execute(&sql_order[0..sql_order.len() - 1]).await?;
-            sql_order.clear();
-            sql_order.push_str(SQL_ORDER);
-        }
+        order_sql.push_str(&format!("('{id}', '{district_id}', '{warehouse_id}', '{customer_id}', NOW(), {carrier_id}, '{order_lines_count}', '{all_local}'),"));
 
-        // TODO batch optimize
         if let Some(new_order) = new_order {
             let NewOrder {
                 order_id,
                 district_id,
                 warehouse_id,
             } = new_order;
-            executor.execute(&format!(
-                "INSERT INTO new_order (no_o_id, no_d_id, no_w_id) VALUES ('{order_id}', '{district_id}', '{warehouse_id}')",
-            ))
-            .await?;
+            new_order_sql.push_str(&format!(
+                "('{order_id}', '{district_id}', '{warehouse_id}'),",
+            ));
         }
 
-        // Insert order lines.
-        let mut sql_order_line = "INSERT INTO order_line (ol_o_id, ol_d_id, ol_w_id, ol_number, ol_i_id, ol_supply_w_id, ol_delivery_d, ol_quantity, ol_amount, ol_dist_info) VALUES".to_string();
         for ol in OrderLineGenerator::from_order(&order) {
             let OrderLine {
                 order_id,
@@ -266,11 +266,28 @@ async fn load_orders(
                 amount,
                 dist_info,
             } = ol;
-            sql_order_line.push_str(&format!("('{order_id}', '{district_id}', '{warehouse_id}', '{number}', '{item_id}', '{supply_warehouse_id}', NOW(), '{quantity}', '{amount}', '{dist_info}'),"));
+            order_line_sql.push_str(&format!("('{order_id}', '{district_id}', '{warehouse_id}', '{number}', '{item_id}', '{supply_warehouse_id}', NOW(), '{quantity}', '{amount}', '{dist_info}'),"));
         }
-        executor
-            .execute(&sql_order_line[0..sql_order_line.len() - 1])
-            .await?;
+
+        if order.id % (batch_size as u32) == 0 {
+            executor.execute(&order_sql[0..order_sql.len() - 1]).await?;
+            executor
+                .execute(&order_line_sql[0..order_line_sql.len() - 1])
+                .await?;
+
+            order_sql.clear();
+            order_line_sql.clear();
+            order_sql.push_str(ORDER_SQL);
+            order_line_sql.push_str(ORDER_LINE_SQL);
+
+            if new_order_sql.ends_with(',') {
+                executor
+                    .execute(&new_order_sql[0..new_order_sql.len() - 1])
+                    .await?;
+                new_order_sql.clear();
+                new_order_sql.push_str(NEW_ORDER_SQL);
+            }
+        }
     }
     Ok(())
 }
